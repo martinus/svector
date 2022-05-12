@@ -8,14 +8,17 @@ test_exe = executable(
     test_sources,
     include_directories: lib_inc,
     dependencies: [
-        thread_dep,
-        doctest_dep,
+        dependency('threads'), # add dependency for threads (-lpthread, see https://mesonbuild.com/howtox.html),
+
+        # see what's in the [provide] sections for the dependency names
+        dependency('doctest'),
+        dependency('fmt')
     ]
 )
 
 test(
     'svector test',
     test_exe,
-    # verbose: true # only meson 0.62
+    verbose: false # only meson 0.62
 )
 
