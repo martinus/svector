@@ -14,5 +14,4 @@ project('svector', 'cpp',
 thread_dep = dependency('threads')
 
 subdir('src/lib')
-subdir('src/app')
 subdir('src/test')
