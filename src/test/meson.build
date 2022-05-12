@@ -1,5 +1,5 @@
 test_sources = [
-    'hello_world.cpp',
+    'basic_api.cpp',
     'main.cpp',
 ]
 
