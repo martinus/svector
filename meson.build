@@ -12,6 +12,8 @@ project('svector', 'cpp',
 
 # add dependency for threads (-lpthread, see https://mesonbuild.com/howtox.html)
 thread_dep = dependency('threads')
+doctest_proj = subproject('doctest')
+doctest_dep = doctest_proj.get_variable('doctest_dep')
 
 subdir('src/lib')
 subdir('src/test')

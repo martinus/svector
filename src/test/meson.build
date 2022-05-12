@@ -7,11 +7,14 @@ test_exe = executable(
     'test-svector',
     test_sources,
     include_directories: lib_inc,
-    dependencies: thread_dep,
+    dependencies: [
+        thread_dep,
+        doctest_dep,
+    ]
 )
 
 test(
-    'wordle test',
+    'svector test',
     test_exe,
     # verbose: true # only meson 0.62
 )
