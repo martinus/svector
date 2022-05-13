@@ -125,11 +125,14 @@ class svector {
         } else {
             // put everything into indirect storage
             auto* storage = detail::storage<T>::alloc(new_capacity);
-            move_elements(data(), storage->data(), m_union.m_direct.m_size);
             if (is_direct()) {
-                // direct -> indirect, nothing special to do here
+                // direct -> indirect
+                move_elements(data<direction::direct>(), storage->data(), size<direction::direct>());
+                storage->size(size<direction::direct>());
             } else {
-                // indirect -> indirect, delete the old storage
+                // indirect -> indirect
+                move_elements(data<direction::indirect>(), storage->data(), size<direction::indirect>());
+                storage->size(size<direction::indirect>());
                 delete m_union.m_indirect;
             }
             m_union.m_indirect = storage;
@@ -177,21 +180,6 @@ class svector {
         }
     }
 
-    template <direction D>
-    void push_back(T const& value) {
-        if (size<D>() == capacity<D>()) {
-            reserve(size<D>() * 2);
-        }
-        new (data<D>() + size<D>()) T(value);
-
-        auto new_size = size<D>() + 1;
-        if constexpr (D == direction::direct) {
-            m_union.m_direct.m_size = new_size;
-        } else {
-            m_union.m_indirect->size(new_size);
-        }
-    }
-
 public:
     svector() {
         m_union.m_direct.m_is_direct = 1;
@@ -231,20 +219,39 @@ public:
     }
 
     void push_back(T const& value) {
-        if (is_direct()) {
-            push_back<direction::direct>(value);
+        size_t c;
+        size_t s;
+        bool is_dir = is_direct();
+        if (is_dir) {
+            c = capacity<direction::direct>();
+            s = size<direction::direct>();
         } else {
-            push_back<direction::indirect>(value);
+            c = capacity<direction::indirect>();
+            s = size<direction::indirect>();
         }
-        // TODO
+
+        if (s == c) {
+            auto new_capacity = calculate_new_capacity(s + 1, c);
+            realloc(new_capacity);
+            // reallocation happened, so we definitely are now in indirect mode
+            is_dir = false;
+        }
+
+        if (is_dir) {
+            new (data<direction::direct>() + s) T(value);
+            m_union.m_direct.m_size = s + 1;
+        } else {
+            new (data<direction::indirect>() + s) T(value);
+            m_union.m_indirect->size(s + 1);
+        }
     }
 
-    void push_back(T&& value) {
-        if (is_direct()) {
-            push_back<direction::direct>(std::move(value));
-        } else {
-            push_back<direction::indirect>(std::move(value));
-        }
+    [[nodiscard]] auto operator[](size_t idx) const -> T const& {
+        return *(data() + idx);
+    }
+
+    [[nodiscard]] auto operator[](size_t idx) -> T& {
+        return *(data() + idx);
     }
 };
 
