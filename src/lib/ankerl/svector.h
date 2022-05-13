@@ -5,6 +5,7 @@
 #include <array>
 #include <cstddef> // size_t, byte
 #include <cstdint> // uintptr_t
+#include <cstring> // memcpy
 #include <limits>
 #include <new>
 #include <type_traits>
@@ -101,11 +102,15 @@ class svector {
     }
 
     static void move_elements(T* source_ptr, T* target_ptr, size_t size) {
-        for (size_t i = 0; i != size; ++i) {
-            new (target_ptr) T(std::move(*source_ptr));
-            source_ptr->~T();
-            ++target_ptr;
-            ++source_ptr;
+        if constexpr (std::is_trivially_copyable_v<T>) {
+            std::memcpy(target_ptr, source_ptr, size * sizeof(T));
+        } else {
+            for (size_t i = 0; i != size; ++i) {
+                new (target_ptr) T(std::move(*source_ptr));
+                source_ptr->~T();
+                ++target_ptr;
+                ++source_ptr;
+            }
         }
     }
 
@@ -169,6 +174,15 @@ class svector {
             return m_union.m_direct.m_size;
         } else {
             return m_union.m_indirect->size();
+        }
+    }
+
+    template <direction D>
+    void size(size_t s) {
+        if constexpr (D == direction::direct) {
+            m_union.m_direct.m_size = s;
+        } else {
+            return m_union.m_indirect->size(s);
         }
     }
 
@@ -262,11 +276,11 @@ public:
         }
 
         if (is_dir) {
-            m_union.m_direct.m_size = s + 1;
+            size<direction::direct>(s + 1);
             return *new (data<direction::direct>() + s) T(std::forward<Args>(args)...);
         }
 
-        m_union.m_indirect->size(s + 1);
+        size<direction::indirect>(s + 1);
         return *new (data<direction::indirect>() + s) T(std::forward<Args>(args)...);
     }
 
@@ -328,6 +342,24 @@ public:
             return *(data<direction::direct>() + size<direction::direct>() - 1);
         }
         return *(data<direction::indirect>() + size<direction::indirect>() - 1);
+    }
+
+    void clear() {
+        if constexpr (!std::is_trivially_destructible_v<T>) {
+            for (auto& x : *this) {
+                x.~T();
+            }
+        }
+
+        if (is_direct()) {
+            size<direction::direct>(0);
+        } else {
+            size<direction::indirect>(0);
+        }
+    }
+
+    [[nodiscard]] auto empty() const -> bool {
+        return 0U == size();
     }
 };
 
