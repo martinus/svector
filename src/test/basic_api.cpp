@@ -21,6 +21,8 @@ TEST_CASE("push_back") {
         REQUIRE(sv.size() == i);
         sv.push_back(i);
         REQUIRE(sv.size() == i + 1);
+        REQUIRE(sv.front() == 0);
+        REQUIRE(sv.back() == i);
 
         for (uint32_t j = 0; j < i; ++j) {
             REQUIRE(sv[j] == j);
@@ -46,4 +48,11 @@ TEST_CASE("iterating_string") {
         REQUIRE(str == std::to_string(i));
         ++i;
     }
+}
+
+TEST_CASE("emplace_back") {
+    auto sv = ankerl::svector<std::string, 3>();
+    sv.emplace_back("hello");
+    REQUIRE(sv.size() == 1);
+    REQUIRE(sv.front() == "hello");
 }

@@ -241,7 +241,8 @@ public:
         return m_union.m_indirect->data();
     }
 
-    void push_back(T const& value) {
+    template <class... Args>
+    auto emplace_back(Args&&... args) -> T& {
         size_t c;
         size_t s;
         bool is_dir = is_direct();
@@ -261,12 +262,20 @@ public:
         }
 
         if (is_dir) {
-            new (data<direction::direct>() + s) T(value);
             m_union.m_direct.m_size = s + 1;
-        } else {
-            new (data<direction::indirect>() + s) T(value);
-            m_union.m_indirect->size(s + 1);
+            return *new (data<direction::direct>() + s) T(std::forward<Args>(args)...);
         }
+
+        m_union.m_indirect->size(s + 1);
+        return *new (data<direction::indirect>() + s) T(std::forward<Args>(args)...);
+    }
+
+    void push_back(T const& value) {
+        emplace_back(value);
+    }
+
+    void push_back(T&& value) {
+        emplace_back(std::move(value));
     }
 
     [[nodiscard]] auto operator[](size_t idx) const -> T const& {
@@ -297,6 +306,28 @@ public:
             return data<direction::direct>() + size<direction::direct>();
         }
         return data<direction::indirect>() + size<direction::indirect>();
+    }
+
+    [[nodiscard]] auto front() const -> T const& {
+        return *data();
+    }
+
+    [[nodiscard]] auto front() -> T& {
+        return *data();
+    }
+
+    [[nodiscard]] auto back() const -> T const& {
+        if (is_direct()) {
+            return *(data<direction::direct>() + size<direction::direct>() - 1);
+        }
+        return *(data<direction::indirect>() + size<direction::indirect>() - 1);
+    }
+
+    [[nodiscard]] auto back() -> T& {
+        if (is_direct()) {
+            return *(data<direction::direct>() + size<direction::direct>() - 1);
+        }
+        return *(data<direction::indirect>() + size<direction::indirect>() - 1);
     }
 };
 
