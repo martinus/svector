@@ -80,8 +80,6 @@ size_ty m_size;
 
 https://www.boost.org/doc/libs/1_79_0/doc/html/boost/container/small_vector.html
 
-Holds
-
 # folly::small_vector
 
 Customizeable size type: https://github.com/facebook/folly/blob/main/folly/docs/small_vector.md
@@ -96,3 +94,10 @@ union Data {
     // InlineStorageType storage_;
 } u;
 ```
+
+
+# absl::InlinedVector
+
+* min: 24 byte
+* fits 16 byte
+

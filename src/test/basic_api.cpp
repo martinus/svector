@@ -1,10 +1,16 @@
 #include <ankerl/svector.h>
 
+#include <absl/container/inlined_vector.h>
+#include <boost/container/small_vector.hpp>
+
 #include <chrono>
 #include <doctest.h>
 #include <fmt/format.h>
+#include <nanobench.h>
 
 #include <vector>
+
+using namespace std::literals;
 
 static_assert(sizeof(ankerl::svector<char, 7>) == 8);
 static_assert(sizeof(ankerl::svector<uint32_t, 5>) == 24);
@@ -64,19 +70,27 @@ TEST_CASE("emplace_back") {
     REQUIRE(sv.size() == 0);
 }
 
-TEST_CASE("bench_push_back" * doctest::skip()) {
-    auto before = std::chrono::steady_clock::now();
-    auto sv = ankerl::svector<uint8_t, 7>();
-    // auto sv = std::vector<uint8_t>();
-    for (size_t i = 0; i < 10000000; ++i) {
-        sv.push_back(static_cast<uint8_t>(i));
-    }
+template <typename Vec>
+void benchPushBack(char const* title, size_t num_elements) {
+    ankerl::nanobench::Bench().batch(num_elements).minEpochTime(100ms).run(title, [&] {
+        auto rng = ankerl::nanobench::Rng(123);
+        for (size_t i = 0; i < 1000; ++i) {
+            auto vec = Vec();
+            auto num_push = rng.bounded(31);
+            for (size_t i = 0; i < num_push; ++i) {
+                vec.push_back(i);
+            }
 
-    size_t s = 0;
-    for (size_t i = 0; i < sv.size(); ++i) {
-        s += sv[i];
-    }
-    REQUIRE(sv.size() == 10000000);
-    auto after = std::chrono::steady_clock::now();
-    fmt::print("{}s {}\n", std::chrono::duration<double>(after - before).count(), s);
+            while (!vec.empty()) {
+                vec.pop_back();
+            }
+        }
+    });
+}
+
+TEST_CASE("bench_push_back" * doctest::skip()) {
+    benchPushBack<ankerl::svector<uint8_t, 7>>("svector<uint8_t, 31>", 1000);
+    benchPushBack<std::vector<uint8_t>>("std::vector<uint8_t>", 1000);
+    benchPushBack<absl::InlinedVector<uint8_t, 7>>("absl::InlinedVector<uint8_t, 31>", 1000);
+    benchPushBack<boost::container::small_vector<uint8_t, 7>>("boost::container::small_vector<uint8_t, 31>", 1000);
 }

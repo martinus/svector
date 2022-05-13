@@ -1,6 +1,7 @@
 test_sources = [
+    'app/doctest.cpp',
+    'app/nanobench.cpp',
     'basic_api.cpp',
-    'main.cpp',
 ]
 
 test_exe = executable(
@@ -12,7 +13,9 @@ test_exe = executable(
 
         # see what's in the [provide] sections for the dependency names
         dependency('doctest'),
-        dependency('fmt')
+        dependency('fmt'),
+        dependency('absl_container'), # just for comparison with inline_vector
+        dependency('boost')
     ]
 )
 

@@ -195,6 +195,17 @@ class svector {
         }
     }
 
+    template <direction D>
+    void pop_back() {
+        if constexpr (std::is_trivially_destructible_v<T>) {
+            size<D>(size<D>() - 1);
+        } else {
+            auto s = size<D>() - 1;
+            (data<D>() + s)->~T();
+            size<D>(s);
+        }
+    }
+
 public:
     svector() {
         m_union.m_direct.m_is_direct = 1;
@@ -360,6 +371,14 @@ public:
 
     [[nodiscard]] auto empty() const -> bool {
         return 0U == size();
+    }
+
+    void pop_back() {
+        if (is_direct()) {
+            pop_back<direction::direct>();
+        } else {
+            pop_back<direction::indirect>();
+        }
     }
 };
 
