@@ -7,6 +7,7 @@
 #include <cstdint> // uintptr_t
 #include <limits>
 #include <new>
+#include <type_traits>
 
 namespace ankerl {
 
@@ -183,7 +184,29 @@ class svector {
 public:
     svector() {
         m_union.m_direct.m_is_direct = 1;
-    };
+        m_union.m_direct.m_size = 0;
+    }
+
+    ~svector() {
+        auto const is_dir = is_direct();
+        if constexpr (!std::is_trivially_destructible_v<T>) {
+            T* ptr;
+            size_t s;
+            if (is_dir) {
+                ptr = data<direction::direct>();
+                s = size<direction::direct>();
+            } else {
+                ptr = data<direction::indirect>();
+                s = size<direction::indirect>();
+            }
+            for (size_t i = 0; i < s; ++i) {
+                (ptr + i)->~T();
+            }
+        }
+        if (!is_dir) {
+            delete m_union.m_indirect;
+        }
+    }
 
     auto reserve(size_t s) {
         auto new_capacity = calculate_new_capacity(s, capacity());
@@ -252,6 +275,28 @@ public:
 
     [[nodiscard]] auto operator[](size_t idx) -> T& {
         return *(data() + idx);
+    }
+
+    [[nodiscard]] auto begin() const -> T const* {
+        return data();
+    }
+
+    [[nodiscard]] auto begin() -> T* {
+        return data();
+    }
+
+    [[nodiscard]] auto end() const -> T const* {
+        if (is_direct()) {
+            return data<direction::direct>() + size<direction::direct>();
+        }
+        return data<direction::indirect>() + size<direction::indirect>();
+    }
+
+    [[nodiscard]] auto end() -> T* {
+        if (is_direct()) {
+            return data<direction::direct>() + size<direction::direct>();
+        }
+        return data<direction::indirect>() + size<direction::indirect>();
     }
 };
 

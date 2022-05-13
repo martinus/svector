@@ -26,4 +26,24 @@ TEST_CASE("push_back") {
             REQUIRE(sv[j] == j);
         }
     }
+
+    uint32_t i = 0;
+    for (auto const& val : sv) {
+        REQUIRE(val == i);
+        ++i;
+    }
+}
+
+// tests if objects are properly moved
+TEST_CASE("iterating_string") {
+    auto sv = ankerl::svector<std::string, 7>();
+    for (auto i = 0; i < 50; ++i) {
+        sv.push_back(std::to_string(i));
+    }
+
+    auto i = 0;
+    for (auto const& str : sv) {
+        REQUIRE(str == std::to_string(i));
+        ++i;
+    }
 }
