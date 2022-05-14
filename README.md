@@ -1,6 +1,33 @@
+<a id="top"></a>
+# ankerl::svector
+
 # svector
 
-A Small Vector implementation.
+`ankerl::svector` is an `std::vector` like container that can hold some elements on the heap without the need for any allocation.
+This implementation is special in that it is highly compact.
+
+|                            | std::vector | boost :: container :: small_vector | absl :: InlinedVector | ankerl::svector |
+|----------------------------|------------:|-----------------------------------:|----------------------:|----------------:|
+| minimum heap size          |          24 |                                 32 |                    24 |           **8** |
+| inline capacity at 8 byte  |           0 |                                  0 |                     0 |           **7** |
+| inline capacity at 16 byte |           0 |                                  0 |                     0 |          **15** |
+| inline capacity at 24 byte |           0 |                                  0 |                    16 |          **23** |
+| inline capacity at 32 byte |           0 |                                  8 |                    24 |          **31** |
+| inline capacity at 64 byte |           0 |                                 40 |                    56 |          **63** |
+| minimum inline capacity    |       **0** |                              **0** |                     1 |           **0** |
+|                            |             |                                    |                       |                 |
+
+## FAQ
+
+* **Does this work?**
+  
+  Yes.
+
+* **Are you sure?**
+
+  Absolutely not! This implementation is barely tested and not feature complete. It might set your computer on fire.
+
+
 
 Alternatives:
 

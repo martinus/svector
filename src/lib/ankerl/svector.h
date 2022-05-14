@@ -380,6 +380,10 @@ public:
             pop_back<direction::indirect>();
         }
     }
+
+    [[nodiscard]] auto max_size() const -> size_t {
+        return std::numeric_limits<size_t>::max();
+    }
 };
 
 } // namespace ankerl
