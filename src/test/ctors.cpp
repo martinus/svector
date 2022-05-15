@@ -5,6 +5,8 @@
 #include <doctest.h>
 #include <fmt/format.h>
 
+#include <forward_list>
+
 namespace {
 
 struct Foo {
@@ -51,9 +53,31 @@ TEST_CASE("ctor_default") {
     counts.printCounts("begin");
     // no copies are made, just default ctor
     auto sv = ankerl::svector<Counter::Obj, 3>(100);
-    //auto sv = std::vector<Counter::Obj>(100);
+    // auto sv = std::vector<Counter::Obj>(100);
     counts.printCounts("after 100");
     REQUIRE(Counter::staticDefaultCtor == 100);
+}
+
+TEST_CASE("ctor_iterators") {
+    auto str = std::string_view("hello world!");
+    auto sv = ankerl::svector<char, 7>(str.begin(), str.end());
+    REQUIRE(sv.size() == str.size());
+    for (size_t i = 0; i < sv.size(); ++i) {
+        REQUIRE(sv[i] == str[i]);
+    }
+}
+
+TEST_CASE("ctor_not_random_access_iterator") {
+    auto l = std::forward_list<char>();
+    auto str = std::string_view("hello world!");
+    for (auto it = str.rbegin(); it != str.rend(); ++it) {
+        l.push_front(*it);
+    }
+    auto sv = ankerl::svector<char, 7>(l.begin(), l.end());
+    REQUIRE(sv.size() == str.size());
+    for (size_t i = 0; i < sv.size(); ++i) {
+        REQUIRE(sv[i] == str[i]);
+    }
 }
 
 } // namespace

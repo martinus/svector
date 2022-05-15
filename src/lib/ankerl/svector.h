@@ -6,6 +6,7 @@
 #include <cstddef> // size_t, byte
 #include <cstdint> // uintptr_t
 #include <cstring> // memcpy
+#include <iterator>
 #include <limits>
 #include <new>
 #include <type_traits>
@@ -13,6 +14,12 @@
 namespace ankerl {
 
 namespace detail {
+
+template <typename Condition, typename T = void>
+using enable_if_t = typename std::enable_if<Condition::value, T>::type;
+
+template <typename It>
+using is_input_iterator = std::is_base_of<std::input_iterator_tag, typename std::iterator_traits<It>::iterator_category>;
 
 class header {
     size_t m_size{};
@@ -177,6 +184,14 @@ class svector {
         }
     }
 
+    void set_size(size_t s) {
+        if (is_direct()) {
+            set_size<direction::direct>(s);
+        } else {
+            set_size<direction::indirect>(s);
+        }
+    }
+
     template <direction D>
     void set_size(size_t s) {
         if constexpr (D == direction::direct) {
@@ -259,11 +274,42 @@ public:
         }
     }
 
+    template <typename It>
+    svector(It first, It last, std::random_access_iterator_tag /*unused*/)
+        : svector() {
+        auto s = std::distance(first, last);
+        reserve(s);
+        auto ptr = data();
+        auto end = ptr + s;
+        while (ptr != end) {
+            new (ptr) T(*first);
+            ++first;
+            ++ptr;
+        }
+        set_size(s);
+    }
+
+    template <typename It>
+    svector(It first, It last, std::input_iterator_tag /*unused*/)
+        : svector() {
+        // TODO this can be made faster, e.g. by setting size only when finished.
+        while (first != last) {
+            push_back(*first);
+            ++first;
+        }
+    }
+
+    template <typename InputIt, typename = detail::enable_if_t<detail::is_input_iterator<InputIt>>>
+    svector(InputIt first, InputIt last)
+        : svector(first, last, typename std::iterator_traits<InputIt>::iterator_category()) {
+        // tag dispatch ctor
+    }
+
     ~svector() {
         auto const is_dir = is_direct();
         if constexpr (!std::is_trivially_destructible_v<T>) {
-            T* ptr;
-            size_t s;
+            T* ptr = nullptr;
+            size_t s = 0;
             if (is_dir) {
                 ptr = data<direction::direct>();
                 s = size<direction::direct>();
