@@ -26,14 +26,14 @@ TEST_CASE("ctor_default") {
 
 TEST_CASE("ctor_count") {
     auto counts = Counter();
-    // counts.printCounts("begin");
+    INFO(counts.printCounts("begin"));
     auto o = Counter::Obj(123, counts);
-    // counts.printCounts("one o");
+    INFO(counts.printCounts("one o"));
 
     // creates a vector with copies, no allocation yet
     REQUIRE(counts.ctor == 1);
     auto sv = ankerl::svector<Counter::Obj, 7>(7, o);
-    // counts.printCounts("ctor with 7");
+    INFO(counts.printCounts("ctor with 7"));
     REQUIRE(counts.copyCtor == 7);
     REQUIRE(counts.moveCtor == 0);
     REQUIRE(sv.size() == 7);
@@ -50,11 +50,11 @@ TEST_CASE("ctor_count_big") {
 TEST_CASE("ctor_default") {
     auto counts = Counter();
     REQUIRE(counts.staticDefaultCtor == 0);
-    // counts.printCounts("begin");
+    INFO(counts.printCounts("begin"));
     //  no copies are made, just default ctor
     auto sv = ankerl::svector<Counter::Obj, 3>(100);
     // auto sv = std::vector<Counter::Obj>(100);
-    // counts.printCounts("after 100");
+    INFO(counts.printCounts("after 100"));
     REQUIRE(Counter::staticDefaultCtor == 100);
 }
 
@@ -109,7 +109,6 @@ TEST_CASE("ctor_move") {
     for (size_t i = 0; i < 100; ++i) {
         sv.emplace_back(i, counts);
     }
-    // counts.printCounts("before move");
     auto total_before = counts.total();
     INFO(counts.printCounts("before move"));
     auto sv2(std::move(sv));
