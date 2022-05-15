@@ -106,38 +106,41 @@ auto Counter::Obj::getForHash() const -> size_t {
 Counter::Counter() {
     Counter::staticDefaultCtor = 0;
     Counter::staticDtor = 0;
-    printHeaderOnce();
 }
 
-void Counter::printHeaderOnce() {
+auto Counter::printHeaderOnce() -> std::string {
     static bool isFirst = true;
-    if (isFirst) {
-        fmt::print("     ctor  defctor  cpyctor     dtor   assign    swaps      get  cnstget     "
-                   "hash   equals     less   ctormv assignmv |    total\n");
-        isFirst = false;
+    if (!isFirst) {
+        return {};
     }
+    isFirst = false;
+    return "     ctor  defctor  cpyctor     dtor   assign    swaps      get  cnstget     "
+           "hash   equals     less   ctormv assignmv |    total\n          ";
 }
 
-void Counter::printCounts(std::string_view title) const {
-    size_t total = ctor + staticDefaultCtor + copyCtor + (dtor + staticDtor) + equals + less + assign + swaps + get +
-                   constGet + hash + moveCtor + moveAssign;
+auto Counter::total() const -> size_t {
+    return ctor + staticDefaultCtor + copyCtor + (dtor + staticDtor) + equals + less + assign + swaps + get + constGet + hash +
+           moveCtor + moveAssign;
+}
 
-    fmt::print("{:9}{:9}{:9}{:9}{:9}{:9}{:9}{:9}{:9}{:9}{:9}{:9}{:9} |{:9} {}\n",
-               ctor,
-               staticDefaultCtor,
-               copyCtor,
-               dtor + staticDtor,
-               assign,
-               swaps,
-               get,
-               constGet,
-               hash,
-               equals,
-               less,
-               moveCtor,
-               moveAssign,
-               total,
-               title);
+auto Counter::printCounts(std::string_view title) const -> std::string {
+    return fmt::format("{}{:9}{:9}{:9}{:9}{:9}{:9}{:9}{:9}{:9}{:9}{:9}{:9}{:9} |{:9} {}",
+                       printHeaderOnce(),
+                       ctor,
+                       staticDefaultCtor,
+                       copyCtor,
+                       dtor + staticDtor,
+                       assign,
+                       swaps,
+                       get,
+                       constGet,
+                       hash,
+                       equals,
+                       less,
+                       moveCtor,
+                       moveAssign,
+                       total(),
+                       title);
 }
 
 void Counter::reset() {

@@ -52,8 +52,10 @@ struct Counter {
     size_t moveCtor{};
     size_t moveAssign{};
 
-    static void printHeaderOnce();
-    void printCounts(std::string_view title) const;
+    [[nodiscard]] static auto printHeaderOnce() -> std::string;
+    [[nodiscard]] auto printCounts(std::string_view title) const -> std::string;
+
+    [[nodiscard]] auto total() const -> size_t;
 
     static size_t staticDefaultCtor;
     static size_t staticDtor;

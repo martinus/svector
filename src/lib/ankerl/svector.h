@@ -1,11 +1,11 @@
 #ifndef ANKERL_SVECTOR_H
 #define ANKERL_SVECTOR_H
 
-#include <algorithm> // max
+#include <algorithm>
 #include <array>
-#include <cstddef> // size_t, byte
-#include <cstdint> // uintptr_t
-#include <cstring> // memcpy
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
 #include <iterator>
 #include <limits>
 #include <new>
@@ -320,6 +320,20 @@ public:
         reserve(s);
         std::copy(other.begin(), other.end(), begin());
         set_size(s);
+    }
+
+    svector(svector&& other) noexcept
+        : svector() {
+        if (!other.is_direct()) {
+            // take other's memory, even when empty
+            m_union.m_indirect = other.m_union.m_indirect;
+        } else {
+            // need to move over each entry
+            std::move(std::make_move_iterator(other.begin()), std::make_move_iterator(other.end()), begin());
+            set_size(other.size<direction::direct>());
+        }
+        other.m_union.m_direct.m_is_direct = 1;
+        other.m_union.m_direct.m_size = 0;
     }
 
     ~svector() {

@@ -50,11 +50,11 @@ TEST_CASE("ctor_count_big") {
 TEST_CASE("ctor_default") {
     auto counts = Counter();
     REQUIRE(counts.staticDefaultCtor == 0);
-    counts.printCounts("begin");
-    // no copies are made, just default ctor
+    // counts.printCounts("begin");
+    //  no copies are made, just default ctor
     auto sv = ankerl::svector<Counter::Obj, 3>(100);
     // auto sv = std::vector<Counter::Obj>(100);
-    counts.printCounts("after 100");
+    // counts.printCounts("after 100");
     REQUIRE(Counter::staticDefaultCtor == 100);
 }
 
@@ -101,5 +101,27 @@ TEST_CASE("ctor_copy") {
     REQUIRE(sv.size() == 0);
     REQUIRE(svCpy2.capacity() == decltype(sv){}.capacity());
 }
+
+TEST_CASE("ctor_move") {
+    auto counts = Counter();
+    INFO(counts.printCounts("begin"));
+    auto sv = ankerl::svector<Counter::Obj, 3>();
+    for (size_t i = 0; i < 100; ++i) {
+        sv.emplace_back(i, counts);
+    }
+    // counts.printCounts("before move");
+    auto total_before = counts.total();
+    INFO(counts.printCounts("before move"));
+    auto sv2(std::move(sv));
+    auto total_after = counts.total();
+    INFO(counts.printCounts("after move"));
+    REQUIRE(total_before == total_after);
+
+    // I guarantee that a moved-from value is in the default constructed state. It just makes everything easier.
+    REQUIRE(sv.empty()); // NOLINT(hicpp-invalid-access-moved)
+    REQUIRE(sv2.size() == 100);
+}
+
+TEST_CASE("ctor_move_direct") {}
 
 } // namespace
