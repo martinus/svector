@@ -207,6 +207,16 @@ class svector {
     }
 
 public:
+    using value_type = T;
+    using size_type = size_t;
+    using difference_type = std::ptrdiff_t;
+    using reference = value_type&;
+    using const_reference = value_type const&;
+    using pointer = T*;
+    using const_pointer = T const*;
+    using iterator = T*;
+    using const_iterator = T const*;
+
     svector() {
         m_union.m_direct.m_is_direct = 1;
         m_union.m_direct.m_size = 0;

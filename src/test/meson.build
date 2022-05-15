@@ -2,10 +2,12 @@ test_sources = [
     'app/Counter.cpp',
     'app/doctest.cpp',
     'app/nanobench.cpp',
-    'basic_api.cpp',
     'bench/bench_push_pop.cpp',
+
+    'basic_api.cpp',
     'emplace_back.cpp',
     'includes_only.cpp',
+    'member_types.cpp',
     'push_back.cpp',
     'show_comparison.cpp',
 ]
