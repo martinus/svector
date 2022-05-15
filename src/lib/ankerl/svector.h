@@ -211,6 +211,15 @@ class svector {
     }
 
     template <direction D>
+    [[nodiscard]] auto data() const -> T const* {
+        if constexpr (D == direction::direct) {
+            return reinterpret_cast<T const*>(m_union.m_direct.m_buffer.data());
+        } else {
+            return m_union.m_indirect->data();
+        }
+    }
+
+    template <direction D>
     void pop_back() {
         if constexpr (std::is_trivially_destructible_v<T>) {
             set_size<D>(size<D>() - 1);
@@ -303,6 +312,14 @@ public:
     svector(InputIt first, InputIt last)
         : svector(first, last, typename std::iterator_traits<InputIt>::iterator_category()) {
         // tag dispatch ctor
+    }
+
+    svector(svector const& other)
+        : svector() {
+        auto s = other.size();
+        reserve(s);
+        std::copy(other.begin(), other.end(), begin());
+        set_size(s);
     }
 
     ~svector() {

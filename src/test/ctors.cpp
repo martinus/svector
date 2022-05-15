@@ -80,4 +80,26 @@ TEST_CASE("ctor_not_random_access_iterator") {
     }
 }
 
+TEST_CASE("ctor_copy") {
+    auto sv = ankerl::svector<char, 7>();
+    for (char c = 'a'; c <= 'z'; ++c) {
+        sv.push_back(c);
+    }
+    REQUIRE(sv.size() == 26);
+
+    auto svCpy(sv);
+    REQUIRE(sv.size() == svCpy.size());
+    for (size_t i = 0; i < sv.size(); ++i) {
+        REQUIRE(sv[i] == svCpy[i]);
+        REQUIRE(&sv[i] != &svCpy[i]);
+    }
+
+    sv.clear();
+    REQUIRE(svCpy.size() == 26);
+    auto svCpy2(sv);
+    REQUIRE(svCpy2.size() == 0);
+    REQUIRE(sv.size() == 0);
+    REQUIRE(svCpy2.capacity() == decltype(sv){}.capacity());
+}
+
 } // namespace
