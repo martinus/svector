@@ -178,7 +178,7 @@ class svector {
     }
 
     template <direction D>
-    void size(size_t s) {
+    void set_size(size_t s) {
         if constexpr (D == direction::direct) {
             m_union.m_direct.m_size = s;
         } else {
@@ -198,12 +198,34 @@ class svector {
     template <direction D>
     void pop_back() {
         if constexpr (std::is_trivially_destructible_v<T>) {
-            size<D>(size<D>() - 1);
+            set_size<D>(size<D>() - 1);
         } else {
             auto s = size<D>() - 1;
             (data<D>() + s)->~T();
-            size<D>(s);
+            set_size<D>(s);
         }
+    }
+
+    /**
+     * @brief We need variadic arguments so we can either use copy ctor or default ctor
+     */
+    template <direction D, class... Args>
+    void resize_after_reserve(size_t count, Args&&... args) {
+        auto current_size = size<D>();
+        if (current_size > count) {
+            if constexpr (!std::is_trivially_destructible_v<T>) {
+                auto* d = data<D>();
+                for (auto ptr = d + count, end = d + current_size; ptr != end; ++ptr) {
+                    ptr->~T();
+                }
+            }
+        } else {
+            auto* d = data<D>();
+            for (auto ptr = d + current_size, end = d + count; ptr != end; ++ptr) {
+                new (ptr) T(std::forward<Args>(args)...);
+            }
+        }
+        set_size<D>(count);
     }
 
 public:
@@ -220,6 +242,21 @@ public:
     svector() {
         m_union.m_direct.m_is_direct = 1;
         m_union.m_direct.m_size = 0;
+    }
+
+    svector(size_t count, T const& value)
+        : svector() {
+        resize(count, value);
+    }
+
+    explicit svector(size_t count)
+        : svector() {
+        reserve(count);
+        if (is_direct()) {
+            resize_after_reserve<direction::direct>(count);
+        } else {
+            resize_after_reserve<direction::indirect>(count);
+        }
     }
 
     ~svector() {
@@ -240,6 +277,21 @@ public:
         }
         if (!is_dir) {
             delete m_union.m_indirect;
+        }
+    }
+
+    void resize(size_t count) {
+        resize(count, T());
+    }
+
+    void resize(size_t count, T const& value) {
+        if (count > capacity()) {
+            reserve(count);
+        }
+        if (is_direct()) {
+            resize_after_reserve<direction::direct>(count, value);
+        } else {
+            resize_after_reserve<direction::indirect>(count, value);
         }
     }
 
@@ -297,11 +349,11 @@ public:
         }
 
         if (is_dir) {
-            size<direction::direct>(s + 1);
+            set_size<direction::direct>(s + 1);
             return *new (data<direction::direct>() + s) T(std::forward<Args>(args)...);
         }
 
-        size<direction::indirect>(s + 1);
+        set_size<direction::indirect>(s + 1);
         return *new (data<direction::indirect>() + s) T(std::forward<Args>(args)...);
     }
 
@@ -373,9 +425,9 @@ public:
         }
 
         if (is_direct()) {
-            size<direction::direct>(0);
+            set_size<direction::direct>(0);
         } else {
-            size<direction::indirect>(0);
+            set_size<direction::indirect>(0);
         }
     }
 

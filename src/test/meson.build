@@ -5,6 +5,7 @@ test_sources = [
     'bench/bench_push_pop.cpp',
 
     'basic_api.cpp',
+    'ctors.cpp',
     'emplace_back.cpp',
     'includes_only.cpp',
     'member_types.cpp',
