@@ -2,6 +2,11 @@ test_sources = [
     'app/doctest.cpp',
     'app/nanobench.cpp',
     'basic_api.cpp',
+    'bench/bench_push_pop.cpp',
+    'emplace_back.cpp',
+    'includes_only.cpp',
+    'push_back.cpp',
+    'show_comparison.cpp',
 ]
 
 test_exe = executable(
@@ -22,6 +27,6 @@ test_exe = executable(
 test(
     'svector test',
     test_exe,
-    verbose: false # only meson 0.62
+    verbose: true # only meson 0.62
 )
 
