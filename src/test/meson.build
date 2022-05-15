@@ -1,4 +1,5 @@
 test_sources = [
+    'app/Counter.cpp',
     'app/doctest.cpp',
     'app/nanobench.cpp',
     'basic_api.cpp',
