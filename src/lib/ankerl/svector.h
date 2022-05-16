@@ -252,6 +252,33 @@ class svector {
         set_size<D>(count);
     }
 
+    template <typename It>
+    void assign(It first, It last, std::input_iterator_tag /*unused*/) {
+        clear();
+
+        // TODO this can be made faster, e.g. by setting size only when finished.
+        while (first != last) {
+            push_back(*first);
+            ++first;
+        }
+    }
+
+    template <typename It>
+    void assign(It first, It last, std::random_access_iterator_tag /*unused*/) {
+        clear();
+
+        auto s = std::distance(first, last);
+        reserve(s);
+        auto ptr = data();
+        auto end = ptr + s;
+        while (ptr != end) {
+            new (ptr) T(*first);
+            ++first;
+            ++ptr;
+        }
+        set_size(s);
+    }
+
 public:
     using value_type = T;
     using size_type = size_t;
@@ -283,35 +310,10 @@ public:
         }
     }
 
-    template <typename It>
-    svector(It first, It last, std::random_access_iterator_tag /*unused*/)
-        : svector() {
-        auto s = std::distance(first, last);
-        reserve(s);
-        auto ptr = data();
-        auto end = ptr + s;
-        while (ptr != end) {
-            new (ptr) T(*first);
-            ++first;
-            ++ptr;
-        }
-        set_size(s);
-    }
-
-    template <typename It>
-    svector(It first, It last, std::input_iterator_tag /*unused*/)
-        : svector() {
-        // TODO this can be made faster, e.g. by setting size only when finished.
-        while (first != last) {
-            push_back(*first);
-            ++first;
-        }
-    }
-
     template <typename InputIt, typename = detail::enable_if_t<detail::is_input_iterator<InputIt>>>
     svector(InputIt first, InputIt last)
-        : svector(first, last, typename std::iterator_traits<InputIt>::iterator_category()) {
-        // tag dispatch ctor
+        : svector() {
+        assign(first, last);
     }
 
     svector(svector const& other)
@@ -366,6 +368,20 @@ public:
         if (!is_dir) {
             delete m_union.m_indirect;
         }
+    }
+
+    void assign(size_t count, T const& value) {
+        clear();
+        resize(count, value);
+    }
+
+    template <typename InputIt, typename = detail::enable_if_t<detail::is_input_iterator<InputIt>>>
+    void assign(InputIt first, InputIt last) {
+        assign(first, last, typename std::iterator_traits<InputIt>::iterator_category());
+    }
+
+    void assign(std::initializer_list<T> l) {
+        assign(l.begin(), l.end());
     }
 
     void resize(size_t count) {

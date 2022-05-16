@@ -4,6 +4,7 @@ test_sources = [
     'app/nanobench.cpp',
     'bench/bench_push_pop.cpp',
 
+    'assign.cpp',
     'basic_api.cpp',
     'ctors.cpp',
     'emplace_back.cpp',
