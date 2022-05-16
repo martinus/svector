@@ -328,8 +328,16 @@ public:
             // take other's memory, even when empty
             m_union.m_indirect = other.m_union.m_indirect;
         } else {
-            // need to move over each entry
-            std::move(std::make_move_iterator(other.begin()), std::make_move_iterator(other.end()), begin());
+            auto* ptr = data<direction::direct>();
+            auto* other_ptr = other.data<direction::direct>();
+            auto s = other.size<direction::direct>();
+            auto* otherEnd = other_ptr + s;
+            while (other_ptr != otherEnd) {
+                new (ptr) T(std::move(*other_ptr));
+                other_ptr->~T();
+                ++ptr;
+                ++other_ptr;
+            }
             set_size(other.size<direction::direct>());
         }
         other.m_union.m_direct.m_is_direct = 1;

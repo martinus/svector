@@ -26,14 +26,15 @@ TEST_CASE("ctor_default") {
 
 TEST_CASE("ctor_count") {
     auto counts = Counter();
-    INFO(counts.printCounts("begin"));
+    INFO(counts);
+    counts.printCounts("begin");
     auto o = Counter::Obj(123, counts);
-    INFO(counts.printCounts("one o"));
+    counts.printCounts("one o");
 
     // creates a vector with copies, no allocation yet
     REQUIRE(counts.ctor == 1);
     auto sv = ankerl::svector<Counter::Obj, 7>(7, o);
-    INFO(counts.printCounts("ctor with 7"));
+    counts.printCounts("ctor with 7");
     REQUIRE(counts.copyCtor == 7);
     REQUIRE(counts.moveCtor == 0);
     REQUIRE(sv.size() == 7);
@@ -49,12 +50,13 @@ TEST_CASE("ctor_count_big") {
 
 TEST_CASE("ctor_default") {
     auto counts = Counter();
+    INFO(counts);
     REQUIRE(counts.staticDefaultCtor == 0);
-    INFO(counts.printCounts("begin"));
+    counts.printCounts("begin");
     //  no copies are made, just default ctor
     auto sv = ankerl::svector<Counter::Obj, 3>(100);
     // auto sv = std::vector<Counter::Obj>(100);
-    INFO(counts.printCounts("after 100"));
+    counts.printCounts("after 100");
     REQUIRE(Counter::staticDefaultCtor == 100);
 }
 
@@ -104,16 +106,17 @@ TEST_CASE("ctor_copy") {
 
 TEST_CASE("ctor_move") {
     auto counts = Counter();
-    INFO(counts.printCounts("begin"));
+    INFO(counts);
+    counts.printCounts("begin");
     auto sv = ankerl::svector<Counter::Obj, 3>();
     for (size_t i = 0; i < 100; ++i) {
         sv.emplace_back(i, counts);
     }
     auto total_before = counts.total();
-    INFO(counts.printCounts("before move"));
+    counts.printCounts("before move");
     auto sv2(std::move(sv));
     auto total_after = counts.total();
-    INFO(counts.printCounts("after move"));
+    counts.printCounts("after move");
     REQUIRE(total_before == total_after);
 
     // I guarantee that a moved-from value is in the default constructed state. It just makes everything easier.
@@ -121,6 +124,45 @@ TEST_CASE("ctor_move") {
     REQUIRE(sv2.size() == 100);
 }
 
-TEST_CASE("ctor_move_direct") {}
+TEST_CASE("ctor_move_direct") {
+    auto counts = Counter();
+    INFO(counts);
+    counts.printCounts("begin");
+    auto sv = ankerl::svector<Counter::Obj, 3>();
+    sv.emplace_back(1, counts);
+    sv.emplace_back(2, counts);
+    sv.emplace_back(3, counts);
+    counts.printCounts("3 emplace_back");
+    REQUIRE(counts.ctor == 3);
+    REQUIRE(counts.dtor == 0);
+    REQUIRE(counts.moveCtor == 0);
+
+    auto svMv = ankerl::svector<Counter::Obj, 3>(std::move(sv));
+    counts.printCounts("after moved");
+    REQUIRE(svMv.size() == 3);
+    REQUIRE(svMv.capacity() == 3);
+    REQUIRE(counts.ctor == 3);
+    REQUIRE(counts.moveCtor == 3);
+    REQUIRE(counts.dtor == 3);
+
+    REQUIRE(svMv[0].get() == 1);
+    REQUIRE(svMv[1].get() == 2);
+    REQUIRE(svMv[2].get() == 3);
+    REQUIRE(sv.empty()); // NOLINT(hicpp-invalid-access-moved)
+}
+
+TEST_CASE("ctor_move_empty_capacity") {
+    auto sv = ankerl::svector<char, 7>(1000, 'x');
+    auto c = sv.capacity();
+    sv.clear();
+    REQUIRE(sv.capacity() == c);
+    REQUIRE(sv.empty());
+
+    auto sv2 = ankerl::svector<char, 7>(std::move(sv));
+    REQUIRE(sv.capacity() == 7); // NOLINT(hicpp-invalid-access-moved)
+    REQUIRE(sv.empty());
+    REQUIRE(sv2.capacity() == c);
+    REQUIRE(sv2.size() == 0);
+}
 
 } // namespace

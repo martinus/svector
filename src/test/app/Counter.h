@@ -2,6 +2,8 @@
 
 #include <cstddef>
 #include <functional>
+#include <iosfwd>
+#include <string>
 #include <string_view>
 
 class CountObj;
@@ -52,14 +54,18 @@ struct Counter {
     size_t moveCtor{};
     size_t moveAssign{};
 
-    [[nodiscard]] static auto printHeaderOnce() -> std::string;
-    [[nodiscard]] auto printCounts(std::string_view title) const -> std::string;
+    std::string m_records =
+        "\n     ctor  defctor  cpyctor     dtor   assign    swaps      get  cnstget     hash   equals     less   ctormv assignmv |    total |\n";
+
+    void printCounts(std::string_view title);
 
     [[nodiscard]] auto total() const -> size_t;
 
     static size_t staticDefaultCtor;
     static size_t staticDtor;
 };
+
+auto operator<<(std::ostream& os, Counter const& c) -> std::ostream&;
 
 namespace std {
 

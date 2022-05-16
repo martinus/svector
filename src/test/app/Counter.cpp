@@ -2,6 +2,8 @@
 
 #include <fmt/format.h>
 
+#include <ostream>
+
 Counter::Obj::Obj()
     : mData(0)
     , mCounts(nullptr) {
@@ -108,39 +110,28 @@ Counter::Counter() {
     Counter::staticDtor = 0;
 }
 
-auto Counter::printHeaderOnce() -> std::string {
-    static bool isFirst = true;
-    if (!isFirst) {
-        return {};
-    }
-    isFirst = false;
-    return "     ctor  defctor  cpyctor     dtor   assign    swaps      get  cnstget     "
-           "hash   equals     less   ctormv assignmv |    total\n          ";
-}
-
 auto Counter::total() const -> size_t {
     return ctor + staticDefaultCtor + copyCtor + (dtor + staticDtor) + equals + less + assign + swaps + get + constGet + hash +
            moveCtor + moveAssign;
 }
 
-auto Counter::printCounts(std::string_view title) const -> std::string {
-    return fmt::format("{}{:9}{:9}{:9}{:9}{:9}{:9}{:9}{:9}{:9}{:9}{:9}{:9}{:9} |{:9} {}",
-                       printHeaderOnce(),
-                       ctor,
-                       staticDefaultCtor,
-                       copyCtor,
-                       dtor + staticDtor,
-                       assign,
-                       swaps,
-                       get,
-                       constGet,
-                       hash,
-                       equals,
-                       less,
-                       moveCtor,
-                       moveAssign,
-                       total(),
-                       title);
+void Counter::printCounts(std::string_view title) {
+    m_records += fmt::format("{:9}{:9}{:9}{:9}{:9}{:9}{:9}{:9}{:9}{:9}{:9}{:9}{:9} |{:9} | {}\n",
+                             ctor,
+                             staticDefaultCtor,
+                             copyCtor,
+                             dtor + staticDtor,
+                             assign,
+                             swaps,
+                             get,
+                             constGet,
+                             hash,
+                             equals,
+                             less,
+                             moveCtor,
+                             moveAssign,
+                             total(),
+                             title);
 }
 
 void Counter::reset() {
@@ -156,6 +147,10 @@ void Counter::reset() {
     hash = 0;
     moveCtor = 0;
     moveAssign = 0;
+}
+
+auto operator<<(std::ostream& os, Counter const& c) -> std::ostream& {
+    return os << c.m_records;
 }
 
 size_t Counter::staticDefaultCtor = 0;
