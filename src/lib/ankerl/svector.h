@@ -465,6 +465,10 @@ public:
         return data();
     }
 
+    [[nodiscard]] auto cbegin() const -> T const* {
+        return begin();
+    }
+
     [[nodiscard]] auto begin() -> T* {
         return data();
     }
@@ -474,6 +478,10 @@ public:
             return data<direction::direct>() + size<direction::direct>();
         }
         return data<direction::indirect>() + size<direction::indirect>();
+    }
+
+    [[nodiscard]] auto cend() const -> T const* {
+        return end();
     }
 
     [[nodiscard]] auto end() -> T* {
