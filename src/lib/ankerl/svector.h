@@ -384,6 +384,15 @@ public:
         assign(l.begin(), l.end());
     }
 
+    auto operator=(svector const& other) -> svector& {
+        if (&other == this) {
+            return *this;
+        }
+
+        assign(other.begin(), other.end());
+        return *this;
+    }
+
     void resize(size_t count) {
         resize(count, T());
     }
