@@ -1,7 +1,6 @@
 #include <ankerl/svector.h>
 
 #include <doctest.h>
-#include <fmt/format.h>
 
 using namespace std::literals;
 

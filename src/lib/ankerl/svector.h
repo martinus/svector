@@ -279,6 +279,48 @@ class svector {
         set_size(s);
     }
 
+    void do_move_assign(svector&& other) {
+        if (!other.is_direct()) {
+            // take other's memory, even when empty
+            m_union.m_indirect = other.m_union.m_indirect;
+        } else {
+            auto* ptr = data<direction::direct>();
+            auto* other_ptr = other.data<direction::direct>();
+            auto s = other.size<direction::direct>();
+            auto* otherEnd = other_ptr + s;
+            while (other_ptr != otherEnd) {
+                new (ptr) T(std::move(*other_ptr));
+                other_ptr->~T();
+                ++ptr;
+                ++other_ptr;
+            }
+            set_size(other.size<direction::direct>());
+        }
+        other.m_union.m_direct.m_is_direct = 1;
+        other.m_union.m_direct.m_size = 0;
+    }
+
+    void destroy() {
+        auto const is_dir = is_direct();
+        if constexpr (!std::is_trivially_destructible_v<T>) {
+            T* ptr = nullptr;
+            size_t s = 0;
+            if (is_dir) {
+                ptr = data<direction::direct>();
+                s = size<direction::direct>();
+            } else {
+                ptr = data<direction::indirect>();
+                s = size<direction::indirect>();
+            }
+            for (size_t i = 0; i < s; ++i) {
+                (ptr + i)->~T();
+            }
+        }
+        if (!is_dir) {
+            delete m_union.m_indirect;
+        }
+    }
+
 public:
     using value_type = T;
     using size_type = size_t;
@@ -326,48 +368,14 @@ public:
 
     svector(svector&& other) noexcept
         : svector() {
-        if (!other.is_direct()) {
-            // take other's memory, even when empty
-            m_union.m_indirect = other.m_union.m_indirect;
-        } else {
-            auto* ptr = data<direction::direct>();
-            auto* other_ptr = other.data<direction::direct>();
-            auto s = other.size<direction::direct>();
-            auto* otherEnd = other_ptr + s;
-            while (other_ptr != otherEnd) {
-                new (ptr) T(std::move(*other_ptr));
-                other_ptr->~T();
-                ++ptr;
-                ++other_ptr;
-            }
-            set_size(other.size<direction::direct>());
-        }
-        other.m_union.m_direct.m_is_direct = 1;
-        other.m_union.m_direct.m_size = 0;
+        do_move_assign(std::move(other));
     }
 
     svector(std::initializer_list<T> init)
         : svector(init.begin(), init.end()) {}
 
     ~svector() {
-        auto const is_dir = is_direct();
-        if constexpr (!std::is_trivially_destructible_v<T>) {
-            T* ptr = nullptr;
-            size_t s = 0;
-            if (is_dir) {
-                ptr = data<direction::direct>();
-                s = size<direction::direct>();
-            } else {
-                ptr = data<direction::indirect>();
-                s = size<direction::indirect>();
-            }
-            for (size_t i = 0; i < s; ++i) {
-                (ptr + i)->~T();
-            }
-        }
-        if (!is_dir) {
-            delete m_union.m_indirect;
-        }
+        destroy();
     }
 
     void assign(size_t count, T const& value) {
@@ -390,6 +398,16 @@ public:
         }
 
         assign(other.begin(), other.end());
+        return *this;
+    }
+
+    auto operator=(svector&& other) noexcept -> svector& {
+        if (&other == this) {
+            // It doesn't seem to be required to do self-check, but let's do it anyways to be safe
+            return *this;
+        }
+        destroy();
+        do_move_assign(std::move(other));
         return *this;
     }
 
