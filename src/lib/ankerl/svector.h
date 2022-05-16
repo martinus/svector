@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <initializer_list>
 #include <iterator>
 #include <limits>
 #include <new>
@@ -408,6 +409,11 @@ public:
         }
         destroy();
         do_move_assign(std::move(other));
+        return *this;
+    }
+
+    auto operator=(std::initializer_list<T> l) -> svector& {
+        assign(l.begin(), l.end());
         return *this;
     }
 

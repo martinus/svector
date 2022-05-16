@@ -127,3 +127,16 @@ TEST_CASE("move_assignment_largeboth") {
     REQUIRE(counts.ctor == 201);
     REQUIRE(counts.ctor + counts.moveCtor == counts.dtor);
 }
+
+TEST_CASE("assign_initializerlist") {
+    auto counts = Counter();
+    INFO(counts);
+
+    auto a = ankerl::svector<Counter::Obj, 3>();
+    a.emplace_back(123, counts);
+    counts("after emplace");
+    a = std::initializer_list<Counter::Obj>{{1, counts}, {2, counts}, {3, counts}};
+    counts("after assignment with initializer_list");
+    REQUIRE(counts.dtor == 1 + 3);
+    REQUIRE(counts.copyCtor == 3); // can't move from initializer_list :-(
+}
