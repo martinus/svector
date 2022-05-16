@@ -204,18 +204,18 @@ class svector {
     template <direction D>
     [[nodiscard]] auto data() -> T* {
         if constexpr (D == direction::direct) {
-            return reinterpret_cast<T*>(m_union.m_direct.m_buffer.data());
+            return std::launder(reinterpret_cast<T*>(m_union.m_direct.m_buffer.data()));
         } else {
-            return m_union.m_indirect->data();
+            return std::launder(m_union.m_indirect->data());
         }
     }
 
     template <direction D>
     [[nodiscard]] auto data() const -> T const* {
         if constexpr (D == direction::direct) {
-            return reinterpret_cast<T const*>(m_union.m_direct.m_buffer.data());
+            return std::launder(reinterpret_cast<T const*>(m_union.m_direct.m_buffer.data()));
         } else {
-            return m_union.m_indirect->data();
+            return std::launder(m_union.m_indirect->data());
         }
     }
 
