@@ -344,6 +344,9 @@ public:
         other.m_union.m_direct.m_size = 0;
     }
 
+    svector(std::initializer_list<T> init)
+        : svector(init.begin(), init.end()) {}
+
     ~svector() {
         auto const is_dir = is_direct();
         if constexpr (!std::is_trivially_destructible_v<T>) {

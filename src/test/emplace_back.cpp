@@ -24,16 +24,16 @@ TEST_CASE("emplace_back_counts") {
         auto sv = ankerl::svector<Counter::Obj, 5>();
 
         REQUIRE(sv.capacity() == 5);
-        counts.printCounts("begin");
+        counts("begin");
         REQUIRE(counts.ctor == 0);
 
         for (size_t i = 0; i < 100; ++i) {
             sv.emplace_back(i, counts);
-            counts.printCounts("after emplace");
+            counts("after emplace");
             REQUIRE(counts.ctor == i + 1);
             REQUIRE(counts.dtor == counts.moveCtor);
         }
     }
-    counts.printCounts("dtor");
+    counts("dtor");
     REQUIRE(counts.dtor == counts.ctor + counts.moveCtor);
 }

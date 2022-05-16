@@ -38,8 +38,6 @@ struct Counter {
 
     Counter();
 
-    void reset();
-
     size_t ctor{};
     size_t defaultCtor{};
     size_t copyCtor{};
@@ -55,14 +53,14 @@ struct Counter {
     size_t moveAssign{};
 
     std::string m_records =
-        "\n     ctor  defctor  cpyctor     dtor   assign    swaps      get  cnstget     hash   equals     less   ctormv assignmv |    total |\n";
+        "\n     ctor  defctor  cpyctor     dtor   assign    swaps      get  cnstget     hash   equals     less   ctormv assignmv|   total |\n";
 
-    void printCounts(std::string_view title);
+    void operator()(std::string_view title);
 
     [[nodiscard]] auto total() const -> size_t;
 
-    static size_t staticDefaultCtor;
-    static size_t staticDtor;
+    static size_t staticDefaultCtor; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
+    static size_t staticDtor;        // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 };
 
 auto operator<<(std::ostream& os, Counter const& c) -> std::ostream&;

@@ -115,8 +115,8 @@ auto Counter::total() const -> size_t {
            moveCtor + moveAssign;
 }
 
-void Counter::printCounts(std::string_view title) {
-    m_records += fmt::format("{:9}{:9}{:9}{:9}{:9}{:9}{:9}{:9}{:9}{:9}{:9}{:9}{:9} |{:9} | {}\n",
+void Counter::operator()(std::string_view title) {
+    m_records += fmt::format("{:9}{:9}{:9}{:9}{:9}{:9}{:9}{:9}{:9}{:9}{:9}{:9}{:9}|{:9}| {}\n",
                              ctor,
                              staticDefaultCtor,
                              copyCtor,
@@ -132,21 +132,6 @@ void Counter::printCounts(std::string_view title) {
                              moveAssign,
                              total(),
                              title);
-}
-
-void Counter::reset() {
-    ctor = 0;
-    copyCtor = 0;
-    dtor = 0;
-    equals = 0;
-    less = 0;
-    assign = 0;
-    swaps = 0;
-    get = 0;
-    constGet = 0;
-    hash = 0;
-    moveCtor = 0;
-    moveAssign = 0;
 }
 
 auto operator<<(std::ostream& os, Counter const& c) -> std::ostream& {
