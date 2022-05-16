@@ -23,7 +23,7 @@ test_exe = executable(
         # see what's in the [provide] sections for the dependency names
         dependency('doctest'),
         dependency('fmt'),
-        dependency('absl_container'), # just for comparison with inline_vector
+        dependency('absl_container', default_options: ['warning_level=0', 'werror=false']), # just for comparison with inline_vector
         dependency('boost')
     ]
 )

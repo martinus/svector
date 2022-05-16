@@ -10,7 +10,7 @@
 namespace {
 
 struct Foo {
-    Foo(int a, char b) {}
+    Foo(int /*a*/, char /*b*/) {}
 };
 
 TEST_CASE("ctor_default") {
