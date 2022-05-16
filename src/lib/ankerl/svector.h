@@ -384,8 +384,11 @@ public:
     }
 
     auto reserve(size_t s) {
-        auto new_capacity = calculate_new_capacity(s, capacity());
-        realloc(new_capacity);
+        auto old_capacity = capacity();
+        auto new_capacity = calculate_new_capacity(s, old_capacity);
+        if (new_capacity > old_capacity) {
+            realloc(new_capacity);
+        }
     }
 
     [[nodiscard]] auto capacity() const -> size_t {
