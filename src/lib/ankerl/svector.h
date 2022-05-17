@@ -348,6 +348,8 @@ public:
     using const_pointer = T const*;
     using iterator = T*;
     using const_iterator = T const*;
+    using reverse_iterator = std::reverse_iterator<iterator>;
+    using const_reverse_iterator = std::reverse_iterator<const_iterator>;
 
     svector() {
         m_union.m_direct.m_is_direct = 1;
@@ -571,6 +573,30 @@ public:
             return data<direction::direct>() + size<direction::direct>();
         }
         return data<direction::indirect>() + size<direction::indirect>();
+    }
+
+    [[nodiscard]] auto rbegin() -> reverse_iterator {
+        return reverse_iterator{end()};
+    }
+
+    [[nodiscard]] auto rbegin() const -> const_reverse_iterator {
+        return const_reverse_iterator{end()};
+    }
+
+    [[nodiscard]] auto crbegin() const -> const_reverse_iterator {
+        return const_reverse_iterator{end()};
+    }
+
+    [[nodiscard]] auto rend() -> reverse_iterator {
+        return reverse_iterator{begin()};
+    }
+
+    [[nodiscard]] auto rend() const -> const_reverse_iterator {
+        return const_reverse_iterator{begin()};
+    }
+
+    [[nodiscard]] auto crend() const -> const_reverse_iterator {
+        return const_reverse_iterator{begin()};
     }
 
     [[nodiscard]] auto front() const -> T const& {

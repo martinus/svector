@@ -13,6 +13,7 @@ test_sources = [
     'includes_only.cpp',
     'member_types.cpp',
     'push_back.cpp',
+    'reverse_iterators.cpp',
     'show_comparison.cpp',
 ]
 
