@@ -650,6 +650,30 @@ public:
     [[nodiscard]] auto max_size() const -> size_t {
         return std::numeric_limits<size_t>::max();
     }
+
+    friend auto operator==(svector const& a, svector const& b) -> bool {
+        return std::equal(a.begin(), a.end(), b.begin(), b.end());
+    }
+
+    [[nodiscard]] friend auto operator!=(svector const& a, svector const& b) -> bool {
+        return !(a == b);
+    }
+
+    [[nodiscard]] friend auto operator<(svector const& a, svector const& b) -> bool {
+        return std::lexicographical_compare(a.begin(), a.end(), b.begin(), b.end());
+    }
+
+    [[nodiscard]] friend auto operator>=(svector const& a, svector const& b) -> bool {
+        return !(a < b);
+    }
+
+    [[nodiscard]] friend auto operator>(svector const& a, svector const& b) -> bool {
+        return std::lexicographical_compare(b.begin(), b.end(), a.begin(), a.end());
+    }
+
+    [[nodiscard]] friend auto operator<=(svector const& a, svector const& b) -> bool {
+        return !(a > b);
+    }
 };
 
 } // namespace ankerl
