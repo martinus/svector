@@ -9,16 +9,16 @@ The smallest `ankerl::svector` is just 8 bytes large. E.g. `ankerl::svector<std:
 
 Here is a table comparing the amount of bytes you can store on the heap for a given total heap size of the vector:
 
-|                                  | 8  | 16 | 24 | 32 | 40 | 48 | 56 | 64 |
-|----------------------------------|---:|---:|---:|---:|---:|---:|---:|---:|
-| `boost::container::small_vector` | -  | -  | -  |  8 | 16 | 24 | 32 | 40 |
-| `absl::InlinedVector`            | -  | -  | 16 | 24 | 32 | 40 | 48 | 56 |
-| `ankerl::svector`                | 7  | 15 | 23 | 31 | 39 | 47 | 55 | 63 |
+|                                  |  8  |  16  |  24  |  32  |  40  |  48  |  56  |  64  |
+|----------------------------------|----:|-----:|-----:|-----:|-----:|-----:|-----:|-----:|
+| `boost::container::small_vector` |  -  |   -  |   -  |   8  |  16  |  24  |  32  |  40  |
+| `absl::InlinedVector`            |  -  |   -  |  16  |  24  |  32  |  40  |  48  |  56  |
+| `ankerl::svector`                |**7**|**15**|**23**|**31**|**39**|**47**|**55**|**63**|
 
 In short:
 
 * 24 bytes overhead for `boost::container::small_vector`
-*  8 bytes overhead for `absl::InlinedVector`
+* 8 bytes overhead for `absl::InlinedVector`
 * 1 (one!) byte overhead for `ankerl::svector`.
 
 Note that boost's `small_vector` cheats a bit. E.g. `boost::container::small_vector<std::byte, 15>` won't give you 15 elements on the heap, but only 8 bytes. It seems to round down to the closest multiple of 8 bytes.
