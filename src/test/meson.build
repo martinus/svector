@@ -17,6 +17,7 @@ test_sources = [
     'reserve.cpp',
     'reverse_iterators.cpp',
     'show_comparison.cpp',
+    'swap.cpp',
 ]
 
 test_exe = executable(

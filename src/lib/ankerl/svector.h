@@ -12,6 +12,7 @@
 #include <new>
 #include <stdexcept>
 #include <type_traits>
+#include <utility>
 
 namespace ankerl {
 
@@ -649,6 +650,11 @@ public:
 
     [[nodiscard]] auto max_size() const -> size_t {
         return std::numeric_limits<size_t>::max();
+    }
+
+    void swap(svector& other) {
+        // TODO we could try to do the minimum number of moves
+        std::swap(*this, other);
     }
 };
 
