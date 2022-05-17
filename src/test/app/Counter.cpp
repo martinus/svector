@@ -138,5 +138,5 @@ auto operator<<(std::ostream& os, Counter const& c) -> std::ostream& {
     return os << c.m_records;
 }
 
-size_t Counter::staticDefaultCtor = 0;
-size_t Counter::staticDtor = 0;
+size_t Counter::staticDefaultCtor = 0; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
+size_t Counter::staticDtor = 0;        // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)

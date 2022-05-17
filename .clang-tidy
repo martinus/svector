@@ -21,6 +21,7 @@ Checks: "*,\
   -llvm-header-guard,\
   -llvmlibc-*,\
   -llvmlibc-callee-namespace,\
+  -readability-function-cognitive-complexity,\
   -readability-magic-numbers,\
   "
 ...

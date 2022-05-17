@@ -86,12 +86,11 @@ class svector {
 
     enum class direction { direct, indirect };
 
+    // TODO what about big endianness?
     struct Direct {
-        // TODO what about big endianness?
-        uint8_t m_is_direct : 1;
-        uint8_t m_size : 7;
-        // see https://stackoverflow.com/a/71828512/48181
-        alignas(T) std::array<std::byte, sizeof(T) * N> m_buffer;
+        uint8_t m_is_direct : 1;                                  // NOLINT(misc-non-private-member-variables-in-classes)
+        uint8_t m_size : 7;                                       // NOLINT(misc-non-private-member-variables-in-classes)
+        alignas(T) std::array<std::byte, sizeof(T) * N> m_buffer; // NOLINT(misc-non-private-member-variables-in-classes)
 
         auto data() -> T* {
             return reinterpret_cast<T*>(m_buffer.data());
@@ -487,8 +486,8 @@ public:
 
     template <class... Args>
     auto emplace_back(Args&&... args) -> T& {
-        size_t c;
-        size_t s;
+        size_t c; // NOLINT(cppcoreguidelines-init-variables)
+        size_t s; // NOLINT(cppcoreguidelines-init-variables)
         bool is_dir = is_direct();
         if (is_dir) {
             c = capacity<direction::direct>();
