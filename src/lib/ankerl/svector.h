@@ -10,6 +10,7 @@
 #include <iterator>
 #include <limits>
 #include <new>
+#include <stdexcept>
 #include <type_traits>
 
 namespace ankerl {
@@ -322,6 +323,22 @@ class svector {
         }
     }
 
+    template <direction D>
+    auto at(size_t idx) const -> T const& {
+        if (idx >= size<D>()) {
+            throw std::out_of_range{"svector: idx out of range"};
+        }
+        return *(data<D>() + idx);
+    }
+
+    template <direction D>
+    auto at(size_t idx) -> T& {
+        if (idx >= size<D>()) {
+            throw std::out_of_range{"svector: idx out of range"};
+        }
+        return *(data<D>() + idx);
+    }
+
 public:
     using value_type = T;
     using size_type = size_t;
@@ -511,6 +528,20 @@ public:
 
     [[nodiscard]] auto operator[](size_t idx) -> T& {
         return *(data() + idx);
+    }
+
+    auto at(size_t idx) const -> T const& {
+        if (is_direct()) {
+            return at<direction::direct>(idx);
+        }
+        return at<direction::indirect>(idx);
+    }
+
+    auto at(size_t idx) -> T& {
+        if (is_direct()) {
+            return at<direction::direct>(idx);
+        }
+        return at<direction::indirect>(idx);
     }
 
     [[nodiscard]] auto begin() const -> T const* {

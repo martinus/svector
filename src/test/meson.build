@@ -6,6 +6,7 @@ test_sources = [
 
     'assign.cpp',
     'assignment_operators.cpp',
+    'at.cpp',
     'basic_api.cpp',
     'ctors.cpp',
     'emplace_back.cpp',
