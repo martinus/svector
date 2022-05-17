@@ -59,6 +59,7 @@ void test_swap() {
 TEST_CASE("swap_stdvector") {
     test_swap<std::vector<Counter::Obj>>();
 }
+
 TEST_CASE("swap_svector") {
     test_swap<ankerl::svector<Counter::Obj, 2>>();
 }

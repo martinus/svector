@@ -656,6 +656,37 @@ public:
         // TODO we could try to do the minimum number of moves
         std::swap(*this, other);
     }
+
+    void shrink_to_fit() {
+        // per the standard we wouldn't need to do anything here. But since we are so nice,
+        // let's do the shrink.
+        auto const c = capacity();
+        auto const s = size();
+        if (s >= c) {
+            return;
+        }
+
+        auto new_capacity = calculate_new_capacity(s, N);
+        if (new_capacity == c) {
+            // nothing change!
+            return;
+        }
+
+        auto tmp = std::move(*this);
+
+        // moved-from this is now in default constructed mode.
+        reserve(s);
+        auto source = tmp.data();
+        auto source_end = source + s;
+        auto target = data();
+
+        while (source != source_end) {
+            new (target) T(std::move(*source));
+            ++source;
+            ++target;
+        }
+        set_size(s);
+    }
 };
 
 template <typename T, size_t NA, size_t NB>
