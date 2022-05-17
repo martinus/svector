@@ -650,31 +650,37 @@ public:
     [[nodiscard]] auto max_size() const -> size_t {
         return std::numeric_limits<size_t>::max();
     }
-
-    friend auto operator==(svector const& a, svector const& b) -> bool {
-        return std::equal(a.begin(), a.end(), b.begin(), b.end());
-    }
-
-    [[nodiscard]] friend auto operator!=(svector const& a, svector const& b) -> bool {
-        return !(a == b);
-    }
-
-    [[nodiscard]] friend auto operator<(svector const& a, svector const& b) -> bool {
-        return std::lexicographical_compare(a.begin(), a.end(), b.begin(), b.end());
-    }
-
-    [[nodiscard]] friend auto operator>=(svector const& a, svector const& b) -> bool {
-        return !(a < b);
-    }
-
-    [[nodiscard]] friend auto operator>(svector const& a, svector const& b) -> bool {
-        return std::lexicographical_compare(b.begin(), b.end(), a.begin(), a.end());
-    }
-
-    [[nodiscard]] friend auto operator<=(svector const& a, svector const& b) -> bool {
-        return !(a > b);
-    }
 };
+
+template <typename T, size_t NA, size_t NB>
+[[nodiscard]] auto operator==(svector<T, NA> const& a, svector<T, NB> const& b) -> bool {
+    return std::equal(a.begin(), a.end(), b.begin(), b.end());
+}
+
+template <typename T, size_t NA, size_t NB>
+[[nodiscard]] auto operator!=(svector<T, NA> const& a, svector<T, NB> const& b) -> bool {
+    return !(a == b);
+}
+
+template <typename T, size_t NA, size_t NB>
+[[nodiscard]] auto operator<(svector<T, NA> const& a, svector<T, NB> const& b) -> bool {
+    return std::lexicographical_compare(a.begin(), a.end(), b.begin(), b.end());
+}
+
+template <typename T, size_t NA, size_t NB>
+[[nodiscard]] auto operator>=(svector<T, NA> const& a, svector<T, NB> const& b) -> bool {
+    return !(a < b);
+}
+
+template <typename T, size_t NA, size_t NB>
+[[nodiscard]] auto operator>(svector<T, NA> const& a, svector<T, NB> const& b) -> bool {
+    return std::lexicographical_compare(b.begin(), b.end(), a.begin(), a.end());
+}
+
+template <typename T, size_t NA, size_t NB>
+[[nodiscard]] auto operator<=(svector<T, NA> const& a, svector<T, NB> const& b) -> bool {
+    return !(a > b);
+}
 
 } // namespace ankerl
 

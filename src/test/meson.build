@@ -8,6 +8,7 @@ test_sources = [
     'assignment_operators.cpp',
     'at.cpp',
     'basic_api.cpp',
+    'comparisons.cpp',
     'ctors.cpp',
     'emplace_back.cpp',
     'includes_only.cpp',
