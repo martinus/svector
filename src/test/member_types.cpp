@@ -18,7 +18,7 @@ static_assert(std::is_same_v<Vec::pointer, std::string*>);
 static_assert(std::is_same_v<Vec::const_pointer, std::string const*>);
 static_assert(std::is_same_v<Vec::iterator, std::string*>);
 static_assert(std::is_same_v<Vec::const_iterator, std::string const*>);
-// static_assert(std::is_same_v<Vec::reverse_iterator, TODO>);
-// static_assert(std::is_same_v<Vec::const_reverse_iterator, TODO>);
+static_assert(std::is_same_v<Vec::reverse_iterator, std::reverse_iterator<Vec::iterator>>);
+static_assert(std::is_same_v<Vec::const_reverse_iterator, std::reverse_iterator<Vec::const_iterator>>);
 
 } // namespace
