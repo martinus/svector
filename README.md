@@ -1,6 +1,6 @@
 <a id="top"></a>
 
-# ankerl::svector
+# ankerl::svector 🚚
 
 `ankerl::svector` is an `std::vector`-like container that can hold some elements on the heap without the need for any allocation.
 There are lots of small vector implementations ([absl](https://github.com/abseil/abseil-cpp/blob/master/absl/container/inlined_vector.h), [boost](https://www.boost.org/doc/libs/1_79_0/doc/html/boost/container/small_vector.html), [folly](https://github.com/facebook/folly/blob/main/folly/docs/small_vector.md), [llvm](https://llvm.org/doxygen/classllvm_1_1SmallVector.html), ...) but this here is special by how compact it is.

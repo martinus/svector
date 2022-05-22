@@ -1,24 +1,48 @@
 #include <app/Counter.h>
 
+#include <app/print.h>
 #include <fmt/format.h>
 
 #include <ostream>
+#include <stdexcept>
+#include <unordered_set>
+
+auto singletonConstructedObjects() -> std::unordered_set<Counter::Obj const*>& {
+    static std::unordered_set<Counter::Obj const*> data{};
+    return data;
+}
 
 Counter::Obj::Obj()
     : mData(0)
     , mCounts(nullptr) {
+    if (!singletonConstructedObjects().emplace(this).second) {
+        print("object already constructed");
+        std::abort();
+    }
     ++staticDefaultCtor;
 }
 
 Counter::Obj::Obj(const size_t& data, Counter& counts)
     : mData(data)
     , mCounts(&counts) {
+    if (!singletonConstructedObjects().emplace(this).second) {
+        print("object already constructed!");
+        std::abort();
+    }
     ++mCounts->ctor;
 }
 
 Counter::Obj::Obj(const Counter::Obj& o)
     : mData(o.mData)
     , mCounts(o.mCounts) {
+    if (1 != singletonConstructedObjects().count(&o)) {
+        print("copying o but it was not constructed!");
+        std::abort();
+    }
+    if (!singletonConstructedObjects().emplace(this).second) {
+        print("object already constructed!");
+        std::abort();
+    }
     if (nullptr != mCounts) {
         ++mCounts->copyCtor;
     }
@@ -27,12 +51,24 @@ Counter::Obj::Obj(const Counter::Obj& o)
 Counter::Obj::Obj(Counter::Obj&& o) noexcept
     : mData(o.mData)
     , mCounts(o.mCounts) {
+    if (1 != singletonConstructedObjects().count(&o)) {
+        print("copying o but it was not constructed!\n");
+        std::abort();
+    }
+    if (!singletonConstructedObjects().emplace(this).second) {
+        print("object already constructed!");
+        std::abort();
+    }
     if (nullptr != mCounts) {
         ++mCounts->moveCtor;
     }
 }
 
 Counter::Obj::~Obj() {
+    if (1 != singletonConstructedObjects().erase(this)) {
+        print("destructed what did not exist before!");
+        std::abort();
+    }
     if (nullptr != mCounts) {
         ++mCounts->dtor;
     } else {
@@ -41,6 +77,10 @@ Counter::Obj::~Obj() {
 }
 
 auto Counter::Obj::operator==(const Counter::Obj& o) const -> bool {
+    if (1 != singletonConstructedObjects().count(this) || 1 != singletonConstructedObjects().count(&o)) {
+        print("operator==");
+        std::abort();
+    }
     if (nullptr != mCounts) {
         ++mCounts->equals;
     }
@@ -48,6 +88,10 @@ auto Counter::Obj::operator==(const Counter::Obj& o) const -> bool {
 }
 
 auto Counter::Obj::operator<(const Obj& o) const -> bool {
+    if (1 != singletonConstructedObjects().count(this) || 1 != singletonConstructedObjects().count(&o)) {
+        print("operator==");
+        std::abort();
+    }
     if (nullptr != mCounts) {
         ++mCounts->less;
     }
@@ -56,6 +100,10 @@ auto Counter::Obj::operator<(const Obj& o) const -> bool {
 
 // NOLINTNEXTLINE(bugprone-unhandled-self-assignment,cert-oop54-cpp)
 auto Counter::Obj::operator=(const Counter::Obj& o) -> Counter::Obj& {
+    if (1 != singletonConstructedObjects().count(this) || 1 != singletonConstructedObjects().count(&o)) {
+        print("operator==");
+        std::abort();
+    }
     mCounts = o.mCounts;
     if (nullptr != mCounts) {
         ++mCounts->assign;
@@ -65,6 +113,10 @@ auto Counter::Obj::operator=(const Counter::Obj& o) -> Counter::Obj& {
 }
 
 auto Counter::Obj::operator=(Counter::Obj&& o) noexcept -> Counter::Obj& {
+    if (1 != singletonConstructedObjects().count(this) || 1 != singletonConstructedObjects().count(&o)) {
+        print("operator==");
+        std::abort();
+    }
     if (nullptr != o.mCounts) {
         mCounts = o.mCounts;
     }
@@ -90,6 +142,10 @@ auto Counter::Obj::get() -> size_t& {
 }
 
 void Counter::Obj::swap(Obj& other) {
+    if (1 != singletonConstructedObjects().count(this) || 1 != singletonConstructedObjects().count(&other)) {
+        print("operator==");
+        std::abort();
+    }
     using std::swap;
     swap(mData, other.mData);
     swap(mCounts, other.mCounts);

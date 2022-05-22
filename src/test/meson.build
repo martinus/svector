@@ -11,6 +11,7 @@ test_sources = [
     'comparisons.cpp',
     'ctors.cpp',
     'emplace_back.cpp',
+    'emplace.cpp',
     'includes_only.cpp',
     'member_types.cpp',
     'push_back.cpp',
