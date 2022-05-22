@@ -1,5 +1,8 @@
 #pragma once
 
+#include <fmt/core.h>
+#include <fmt/format.h>
+
 #include <cstddef>
 #include <functional>
 #include <iosfwd>
@@ -75,3 +78,13 @@ struct hash<Counter::Obj> {
 };
 
 } // namespace std
+
+template <>
+struct fmt::formatter<Counter::Obj> {
+    static constexpr auto parse(format_parse_context& ctx) -> decltype(ctx.begin()) {
+        return ctx.end();
+    }
+    static auto format(Counter::Obj const& o, fmt::format_context& ctx) -> decltype(ctx.out()) {
+        return format_to(ctx.out(), "{}", o.get());
+    }
+};

@@ -704,6 +704,7 @@ public:
 
     template <class... Args>
     void emplace(const_iterator pos, Args&&... args) {
+        auto is_pos_at_end = (pos == cend());
         auto s = size();
         if (s == capacity()) {
             // TODO implement special handling so we don't have to move twice!
@@ -713,6 +714,10 @@ public:
         }
         auto* p = const_cast<T*>(pos); // NOLINT(cppcoreguidelines-pro-type-const-cast)
         move_right(p, end(), p + 1);
+        if (!is_pos_at_end) {
+            p->~T();
+        }
+        // we could also create & move, but I think constructing inplace is nicer.
         new (p) T(std::forward<Args>(args)...);
         set_size(s + 1);
     }

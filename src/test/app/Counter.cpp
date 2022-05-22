@@ -16,7 +16,7 @@ Counter::Obj::Obj()
     : mData(0)
     , mCounts(nullptr) {
     if (!singletonConstructedObjects().emplace(this).second) {
-        print("object already constructed");
+        print("ERROR at {}({}): {}\n", __FILE__, __LINE__, __func__);
         std::abort();
     }
     ++staticDefaultCtor;
@@ -26,7 +26,7 @@ Counter::Obj::Obj(const size_t& data, Counter& counts)
     : mData(data)
     , mCounts(&counts) {
     if (!singletonConstructedObjects().emplace(this).second) {
-        print("object already constructed!");
+        print("ERROR at {}({}): {}\n", __FILE__, __LINE__, __func__);
         std::abort();
     }
     ++mCounts->ctor;
@@ -36,11 +36,11 @@ Counter::Obj::Obj(const Counter::Obj& o)
     : mData(o.mData)
     , mCounts(o.mCounts) {
     if (1 != singletonConstructedObjects().count(&o)) {
-        print("copying o but it was not constructed!");
+        print("ERROR at {}({}): {}\n", __FILE__, __LINE__, __func__);
         std::abort();
     }
     if (!singletonConstructedObjects().emplace(this).second) {
-        print("object already constructed!");
+        print("ERROR at {}({}): {}\n", __FILE__, __LINE__, __func__);
         std::abort();
     }
     if (nullptr != mCounts) {
@@ -52,11 +52,11 @@ Counter::Obj::Obj(Counter::Obj&& o) noexcept
     : mData(o.mData)
     , mCounts(o.mCounts) {
     if (1 != singletonConstructedObjects().count(&o)) {
-        print("copying o but it was not constructed!\n");
+        print("ERROR at {}({}): {}\n", __FILE__, __LINE__, __func__);
         std::abort();
     }
     if (!singletonConstructedObjects().emplace(this).second) {
-        print("object already constructed!");
+        print("ERROR at {}({}): {}\n", __FILE__, __LINE__, __func__);
         std::abort();
     }
     if (nullptr != mCounts) {
@@ -66,7 +66,7 @@ Counter::Obj::Obj(Counter::Obj&& o) noexcept
 
 Counter::Obj::~Obj() {
     if (1 != singletonConstructedObjects().erase(this)) {
-        print("destructed what did not exist before!");
+        print("ERROR at {}({}): {}\n", __FILE__, __LINE__, __func__);
         std::abort();
     }
     if (nullptr != mCounts) {
@@ -78,7 +78,7 @@ Counter::Obj::~Obj() {
 
 auto Counter::Obj::operator==(const Counter::Obj& o) const -> bool {
     if (1 != singletonConstructedObjects().count(this) || 1 != singletonConstructedObjects().count(&o)) {
-        print("operator==");
+        print("ERROR at {}({}): {}\n", __FILE__, __LINE__, __func__);
         std::abort();
     }
     if (nullptr != mCounts) {
@@ -89,7 +89,7 @@ auto Counter::Obj::operator==(const Counter::Obj& o) const -> bool {
 
 auto Counter::Obj::operator<(const Obj& o) const -> bool {
     if (1 != singletonConstructedObjects().count(this) || 1 != singletonConstructedObjects().count(&o)) {
-        print("operator==");
+        print("ERROR at {}({}): {}\n", __FILE__, __LINE__, __func__);
         std::abort();
     }
     if (nullptr != mCounts) {
@@ -101,7 +101,7 @@ auto Counter::Obj::operator<(const Obj& o) const -> bool {
 // NOLINTNEXTLINE(bugprone-unhandled-self-assignment,cert-oop54-cpp)
 auto Counter::Obj::operator=(const Counter::Obj& o) -> Counter::Obj& {
     if (1 != singletonConstructedObjects().count(this) || 1 != singletonConstructedObjects().count(&o)) {
-        print("operator==");
+        print("ERROR at {}({}): {}\n", __FILE__, __LINE__, __func__);
         std::abort();
     }
     mCounts = o.mCounts;
@@ -114,7 +114,7 @@ auto Counter::Obj::operator=(const Counter::Obj& o) -> Counter::Obj& {
 
 auto Counter::Obj::operator=(Counter::Obj&& o) noexcept -> Counter::Obj& {
     if (1 != singletonConstructedObjects().count(this) || 1 != singletonConstructedObjects().count(&o)) {
-        print("operator==");
+        print("ERROR at {}({}): {}\n", __FILE__, __LINE__, __func__);
         std::abort();
     }
     if (nullptr != o.mCounts) {
@@ -143,7 +143,7 @@ auto Counter::Obj::get() -> size_t& {
 
 void Counter::Obj::swap(Obj& other) {
     if (1 != singletonConstructedObjects().count(this) || 1 != singletonConstructedObjects().count(&other)) {
-        print("operator==");
+        print("ERROR at {}({}): {}\n", __FILE__, __LINE__, __func__);
         std::abort();
     }
     using std::swap;

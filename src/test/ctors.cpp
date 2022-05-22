@@ -83,9 +83,12 @@ TEST_CASE("ctor_not_random_access_iterator") {
 }
 
 TEST_CASE("ctor_copy") {
-    auto sv = ankerl::svector<char, 7>();
+    auto counts = Counter();
+    INFO(counts);
+
+    auto sv = ankerl::svector<Counter::Obj, 7>();
     for (char c = 'a'; c <= 'z'; ++c) {
-        sv.push_back(c);
+        sv.emplace_back(c, counts);
     }
     REQUIRE(sv.size() == 26);
 
