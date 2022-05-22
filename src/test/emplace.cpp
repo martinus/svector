@@ -61,7 +61,7 @@ TEST_CASE("emplace_checked") {
             vc.emplace_back(ins, counts);
         }
 
-        for (size_t i = 0; i != vc.size(); ++i) {
+        for (size_t i = 0; i <= vc.size(); ++i) {
             auto x = vc;
             x.emplace_at(i, 999, counts);
         }

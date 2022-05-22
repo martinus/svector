@@ -303,6 +303,19 @@ class svector {
         other.m_union.m_direct.m_size = 0;
     }
 
+    // assumes all point into the same contiguous memory
+    // assumes target_begin is to the right of source_end
+    // assumes range source_end to target_begin is uninitialized memory
+    // assumes source_begin to source_end is initialized objects
+    void move_right(T* source_begin, T* source_end, T* target_begin) {
+        // 1. uninitialized moves
+        auto const num_moves = std::distance(source_begin, source_end);
+        auto const target_end = target_begin + num_moves;
+        auto const num_uninitialized_move = std::min(num_moves, std::distance(source_end, target_end));
+        std::uninitialized_move(source_end - num_uninitialized_move, source_end, target_end - num_uninitialized_move);
+        std::move_backward(source_begin, source_end - num_uninitialized_move, target_end - num_uninitialized_move);
+    }
+
     void destroy() {
         auto const is_dir = is_direct();
         if constexpr (!std::is_trivially_destructible_v<T>) {
@@ -687,19 +700,6 @@ public:
             ++target;
         }
         set_size(s);
-    }
-
-    // assumes all point into the same contiguous memory
-    // assumes target_begin is to the right of source_end
-    // assumes range source_end to target_begin is uninitialized memory
-    // assumes source_begin to source_end is initialized objects
-    void move_right(T* source_begin, T* source_end, T* target_begin) {
-        // 1. uninitialized moves
-        auto const num_moves = std::distance(source_begin, source_end);
-        auto const target_end = target_begin + num_moves;
-        auto const num_uninitialized_move = std::min(num_moves, std::distance(source_end, target_end));
-        std::uninitialized_move(source_end - num_uninitialized_move, source_end, target_end - num_uninitialized_move);
-        std::move_backward(source_begin, source_end - num_uninitialized_move, target_end - num_uninitialized_move);
     }
 
     template <class... Args>
