@@ -9,6 +9,7 @@
 #include <initializer_list>
 #include <iterator>
 #include <limits>
+#include <memory>
 #include <new>
 #include <stdexcept>
 #include <type_traits>
@@ -110,7 +111,7 @@ class svector {
         return m_union.m_direct.m_is_direct;
     }
 
-    static void move_elements(T* source_ptr, T* target_ptr, size_t size) {
+    static void uninitialized_move_and_destroy(T* source_ptr, T* target_ptr, size_t size) {
         if constexpr (std::is_trivially_copyable_v<T>) {
             std::memcpy(target_ptr, source_ptr, size * sizeof(T));
         } else {
@@ -132,7 +133,7 @@ class svector {
             } else {
                 // indirect -> direct
                 auto* storage = m_union.m_indirect;
-                move_elements(storage->data(), m_union.m_direct.data(), storage->size());
+                uninitialized_move_and_destroy(storage->data(), m_union.m_direct.data(), storage->size());
                 m_union.m_direct.m_size = storage->size();
                 m_union.m_direct.m_is_direct = 1;
                 delete storage;
@@ -142,11 +143,11 @@ class svector {
             auto* storage = detail::storage<T>::alloc(new_capacity);
             if (is_direct()) {
                 // direct -> indirect
-                move_elements(data<direction::direct>(), storage->data(), size<direction::direct>());
+                uninitialized_move_and_destroy(data<direction::direct>(), storage->data(), size<direction::direct>());
                 storage->size(size<direction::direct>());
             } else {
                 // indirect -> indirect
-                move_elements(data<direction::indirect>(), storage->data(), size<direction::indirect>());
+                uninitialized_move_and_destroy(data<direction::indirect>(), storage->data(), size<direction::indirect>());
                 storage->size(size<direction::indirect>());
                 delete m_union.m_indirect;
             }
@@ -382,7 +383,7 @@ public:
         : svector() {
         auto s = other.size();
         reserve(s);
-        std::copy(other.begin(), other.end(), begin());
+        std::uninitialized_copy(other.begin(), other.end(), begin());
         set_size(s);
     }
 
@@ -686,6 +687,34 @@ public:
             ++target;
         }
         set_size(s);
+    }
+
+    // assumes all point into the same contiguous memory
+    // assumes target_begin is to the right of source_end
+    // assumes range source_end to target_begin is uninitialized memory
+    // assumes source_begin to source_end is initialized objects
+    void move_right(T* source_begin, T* source_end, T* target_begin) {
+        // 1. uninitialized moves
+        auto const num_moves = std::distance(source_begin, source_end);
+        auto const target_end = target_begin + num_moves;
+        auto const num_uninitialized_move = std::min(num_moves, std::distance(source_end, target_end));
+        std::uninitialized_move(source_end - num_uninitialized_move, source_end, target_end - num_uninitialized_move);
+        std::move_backward(source_begin, source_end - num_uninitialized_move, target_end - num_uninitialized_move);
+    }
+
+    template <class... Args>
+    void emplace(const_iterator pos, Args&&... args) {
+        auto s = size();
+        if (s == capacity()) {
+            // TODO implement special handling so we don't have to move twice!
+            auto offset = std::distance(cbegin(), pos);
+            reserve(s + 1);
+            pos = begin() + offset;
+        }
+        auto* p = const_cast<T*>(pos); // NOLINT(cppcoreguidelines-pro-type-const-cast)
+        move_right(p, end(), p + 1);
+        new (p) T(std::forward<Args>(args)...);
+        set_size(s + 1);
     }
 };
 
