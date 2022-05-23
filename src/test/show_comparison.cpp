@@ -14,7 +14,6 @@ void show(char const* what) {
 }
 
 TEST_CASE("show_sizeof" * doctest::skip()) {
-    std::vector<char>().max_size();
     // static constexpr auto a = sizeof(absl::InlinedVector<uint8_t, 24>);
     // static constexpr auto s = sizeof(ankerl::svector<uint8_t, 31>);
     // static constexpr auto b = sizeof(boost::container::small_vector<uint8_t, 16>);

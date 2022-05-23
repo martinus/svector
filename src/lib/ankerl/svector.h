@@ -115,12 +115,8 @@ class svector {
         if constexpr (std::is_trivially_copyable_v<T>) {
             std::memcpy(target_ptr, source_ptr, size * sizeof(T));
         } else {
-            for (size_t i = 0; i != size; ++i) {
-                new (static_cast<void*>(target_ptr)) T(std::move(*source_ptr));
-                source_ptr->~T();
-                ++target_ptr;
-                ++source_ptr;
-            }
+            std::uninitialized_move_n(source_ptr, size, target_ptr);
+            std::destroy_n(source_ptr, size);
         }
     }
 
@@ -242,9 +238,7 @@ class svector {
         if (current_size > count) {
             if constexpr (!std::is_trivially_destructible_v<T>) {
                 auto* d = data<D>();
-                for (auto ptr = d + count, end = d + current_size; ptr != end; ++ptr) {
-                    ptr->~T();
-                }
+                std::destroy(d + count, d + current_size);
             }
         } else {
             auto* d = data<D>();
@@ -272,32 +266,23 @@ class svector {
 
         auto s = std::distance(first, last);
         reserve(s);
-        auto ptr = data();
-        auto end = ptr + s;
-        while (ptr != end) {
-            new (static_cast<void*>(ptr)) T(*first);
-            ++first;
-            ++ptr;
-        }
+        std::uninitialized_copy(first, last, data());
         set_size(s);
     }
 
+    // precondition: all uninitialized
     void do_move_assign(svector&& other) {
         if (!other.is_direct()) {
             // take other's memory, even when empty
             m_union.m_indirect = other.m_union.m_indirect;
         } else {
-            auto* ptr = data<direction::direct>();
             auto* other_ptr = other.data<direction::direct>();
             auto s = other.size<direction::direct>();
-            auto* otherEnd = other_ptr + s;
-            while (other_ptr != otherEnd) {
-                new (static_cast<void*>(ptr)) T(std::move(*other_ptr));
-                other_ptr->~T();
-                ++ptr;
-                ++other_ptr;
-            }
-            set_size(other.size<direction::direct>());
+            auto* other_end = other_ptr + s;
+
+            std::uninitialized_move(other_ptr, other_end, data<direction::direct>());
+            std::destroy(other_ptr, other_end);
+            set_size(s);
         }
         other.m_union.m_direct.m_is_direct = 1;
         other.m_union.m_direct.m_size = 0;
@@ -360,9 +345,7 @@ class svector {
                 ptr = data<direction::indirect>();
                 s = size<direction::indirect>();
             }
-            for (size_t i = 0; i < s; ++i) {
-                (ptr + i)->~T();
-            }
+            std::destroy_n(ptr, s);
         }
         if (!is_dir) {
             delete m_union.m_indirect;
@@ -670,9 +653,7 @@ public:
 
     void clear() {
         if constexpr (!std::is_trivially_destructible_v<T>) {
-            for (auto& x : *this) {
-                x.~T();
-            }
+            std::destroy(begin(), end());
         }
 
         if (is_direct()) {
@@ -722,15 +703,7 @@ public:
 
         // moved-from this is now in default constructed mode.
         reserve(s);
-        auto source = tmp.data();
-        auto source_end = source + s;
-        auto target = data();
-
-        while (source != source_end) {
-            new (static_cast<void*>(target)) T(std::move(*source));
-            ++source;
-            ++target;
-        }
+        std::uninitialized_move_n(tmp.data(), s, data());
         set_size(s);
     }
 

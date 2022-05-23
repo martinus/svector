@@ -1,5 +1,7 @@
 #include <ankerl/svector.h>
 
+#include <vector>
+
 #include <doctest.h>
 
 template <typename A, typename B>

@@ -17,6 +17,7 @@ test_sources = [
     'member_types.cpp',
     'push_back.cpp',
     'reserve.cpp',
+    'resize.cpp',
     'reverse_iterators.cpp',
     'show_comparison.cpp',
     'shrink_to_fit.cpp',
