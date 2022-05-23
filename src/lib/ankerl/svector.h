@@ -267,7 +267,7 @@ class svector {
     }
 
     template <typename It>
-    void assign(It first, It last, std::random_access_iterator_tag /*unused*/) {
+    void assign(It first, It last, std::forward_iterator_tag /*unused*/) {
         clear();
 
         auto s = std::distance(first, last);
@@ -303,17 +303,49 @@ class svector {
         other.m_union.m_direct.m_size = 0;
     }
 
-    // assumes all point into the same contiguous memory
-    // assumes target_begin is to the right of source_end
-    // assumes range source_end to target_begin is uninitialized memory
-    // assumes source_begin to source_end is initialized objects
-    void move_right(T* source_begin, T* source_end, T* target_begin) {
+    /**
+     * @brief Shifts data [source_begin, source_end( to the right, starting on target_begin.
+     *
+     * Preconditions:
+     * * contiguous memory
+     * * source_begin <= target_begin
+     * * source_end onwards is uninitialized memory
+     *
+     * Destroys then empty elements in [source_begin, source_end(
+     */
+    auto shift_right(T* source_begin, T* source_end, T* target_begin) {
         // 1. uninitialized moves
         auto const num_moves = std::distance(source_begin, source_end);
         auto const target_end = target_begin + num_moves;
         auto const num_uninitialized_move = std::min(num_moves, std::distance(source_end, target_end));
         std::uninitialized_move(source_end - num_uninitialized_move, source_end, target_end - num_uninitialized_move);
         std::move_backward(source_begin, source_end - num_uninitialized_move, target_end - num_uninitialized_move);
+        std::destroy(source_begin, std::min(source_end, target_begin));
+    }
+
+    // makes space for uninitialized data of cout elements. Also updates size.
+    auto make_uninitialized_space(T const* pos, size_t count) -> T* {
+        auto* const p = const_cast<T*>(pos); // NOLINT(cppcoreguidelines-pro-type-const-cast)
+        auto s = size();
+        if (s + count > capacity()) {
+            auto target = svector();
+            // we know target is indirect because we're increasing capacity
+            target.reserve(s + count);
+
+            // move everything [begin, pos[
+            auto* target_pos = std::uninitialized_move(begin(), p, target.template data<direction::indirect>());
+
+            // move everything [pos, end]
+            std::uninitialized_move(p, end(), target_pos + count);
+
+            target.template set_size<direction::indirect>(s + count);
+            *this = std::move(target);
+            return target_pos;
+        }
+
+        shift_right(p, end(), p + count);
+        set_size(s + count);
+        return p;
     }
 
     void destroy() {
@@ -704,40 +736,8 @@ public:
 
     template <class... Args>
     auto emplace(const_iterator pos, Args&&... args) -> iterator {
-        auto* p = const_cast<T*>(pos); // NOLINT(cppcoreguidelines-pro-type-const-cast)
-        auto s = size();
-        if (s == capacity()) {
-            auto target = svector();
-            // we know target is indirect because we're increasing capacity
-            target.reserve(s + 1);
-
-            // move everything [begin, pos[
-            auto* target_pos = std::uninitialized_move(begin(), p, target.template data<direction::indirect>());
-
-            // create what we're inserting
-            new (static_cast<void*>(target_pos)) T(std::forward<Args>(args)...);
-
-            // move everything [pos, end]
-            std::uninitialized_move(p, end(), target_pos + 1);
-
-            target.template set_size<direction::indirect>(s + 1);
-            *this = std::move(target);
-            return target_pos;
-
-            // old, simpler handling, but not as efficient
-            // auto offset = std::distance(cbegin(), pos);
-            // reserve(s + 1);
-            // p = begin() + offset;
-        }
-
-        move_right(p, end(), p + 1);
-        if (p != end()) {
-            p->~T();
-        }
-        // we could also create & move, but I think constructing inplace is nicer.
-        new (static_cast<void*>(p)) T(std::forward<Args>(args)...);
-        set_size(s + 1);
-        return p;
+        auto* p = make_uninitialized_space(pos, 1);
+        return new (static_cast<void*>(p)) T(std::forward<Args>(args)...);
     }
 
     auto insert(const_iterator pos, T const& value) -> iterator {
@@ -746,6 +746,48 @@ public:
 
     auto insert(const_iterator pos, T&& value) -> iterator {
         return emplace(pos, std::move(value));
+    }
+
+    auto insert(const_iterator pos, size_t count, T const& value) -> iterator {
+        auto* p = make_uninitialized_space(pos, count);
+        std::uninitialized_fill_n(p, count, value);
+        return p;
+    }
+
+    template <typename It>
+    auto insert(const_iterator pos, It first, It last, std::input_iterator_tag /*unused*/) {
+        if (!(first != last)) {
+            return const_cast<T*>(pos); // NOLINT(cppcoreguidelines-pro-type-const-cast)
+        }
+
+        // just input_iterator_tag makes this very slow. Let's do the same as the STL.
+        if (pos == end()) {
+            auto s = size();
+            while (first != last) {
+                emplace_back(*first);
+                ++first;
+            }
+            return begin() + s;
+        }
+
+        auto tmp = svector(first, last);
+        return insert(pos, std::make_move_iterator(tmp.begin()), std::make_move_iterator(tmp.end()));
+    }
+
+    template <typename It>
+    auto insert(const_iterator pos, It first, It last, std::forward_iterator_tag /*unused*/) {
+        auto* p = make_uninitialized_space(pos, std::distance(first, last));
+        std::uninitialized_copy(first, last, p);
+        return p;
+    }
+
+    template <typename InputIt, typename = detail::enable_if_t<detail::is_input_iterator<InputIt>>>
+    auto insert(const_iterator pos, InputIt first, InputIt last) -> iterator {
+        return insert(pos, first, last, typename std::iterator_traits<InputIt>::iterator_category());
+    }
+
+    auto insert(const_iterator pos, std::initializer_list<T> l) -> iterator {
+        return insert(pos, l.begin(), l.end());
     }
 };
 
