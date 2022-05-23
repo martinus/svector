@@ -54,9 +54,9 @@ TEST_CASE("emplace") {
 
 TEST_CASE("emplace_checked") {
     auto counts = Counter();
-    auto vc = VecTester<Counter::Obj, 4>();
 
     for (size_t s = 0; s < 6; ++s) {
+        auto vc = VecTester<Counter::Obj, 4>();
         for (size_t ins = 0; ins < s; ++ins) {
             vc.emplace_back(ins, counts);
         }

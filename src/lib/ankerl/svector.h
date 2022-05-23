@@ -704,17 +704,34 @@ public:
 
     template <class... Args>
     void emplace(const_iterator pos, Args&&... args) {
-        auto is_pos_at_end = (pos == cend());
+        auto* p = const_cast<T*>(pos); // NOLINT(cppcoreguidelines-pro-type-const-cast)
         auto s = size();
         if (s == capacity()) {
-            // TODO implement special handling so we don't have to move twice!
-            auto offset = std::distance(cbegin(), pos);
-            reserve(s + 1);
-            pos = begin() + offset;
+            auto target = svector();
+            // we know target is indirect because we're increasing capacity
+            target.reserve(s + 1);
+
+            // move everything [begin, pos[
+            auto* target_pos = std::uninitialized_move(begin(), p, target.template data<direction::indirect>());
+
+            // create what we're inserting
+            new (target_pos) T(std::forward<Args>(args)...);
+
+            // move everything [pos, end]
+            std::uninitialized_move(p, end(), target_pos + 1);
+            
+            target.template set_size<direction::indirect>(s + 1);
+            *this = std::move(target);
+            return;
+
+            // old, simpler handling, but not as efficient
+            // auto offset = std::distance(cbegin(), pos);
+            // reserve(s + 1);
+            // p = begin() + offset;
         }
-        auto* p = const_cast<T*>(pos); // NOLINT(cppcoreguidelines-pro-type-const-cast)
+
         move_right(p, end(), p + 1);
-        if (!is_pos_at_end) {
+        if (p != end()) {
             p->~T();
         }
         // we could also create & move, but I think constructing inplace is nicer.
