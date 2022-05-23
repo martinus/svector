@@ -13,6 +13,7 @@ test_sources = [
     'emplace_back.cpp',
     'emplace.cpp',
     'includes_only.cpp',
+    'insert.cpp',
     'member_types.cpp',
     'push_back.cpp',
     'reserve.cpp',

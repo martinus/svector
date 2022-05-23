@@ -1,45 +1,10 @@
 #include <ankerl/svector.h>
 #include <app/Counter.h>
+#include <app/VecTester.h>
 
 #include <doctest.h>
-#include <fmt/format.h>
 
-#include <stdexcept>
-
-template <class T, size_t N>
-class VecTester {
-    std::vector<T> m_v{};
-    ankerl::svector<T, N> m_s{};
-
-    void assert_eq() {
-        if (m_v.size() != m_s.size()) {
-            throw std::runtime_error(fmt::format("vec size != svec size: {} != {}", m_v.size(), m_s.size()));
-        }
-        if (!std::equal(m_v.begin(), m_v.end(), m_s.begin(), m_s.end())) {
-            throw std::runtime_error(
-                fmt::format("vec content != svec content:\n[{}]\n[{}]", fmt::join(m_v, ","), fmt::join(m_s, ",")));
-        }
-    }
-
-public:
-    template <class... Args>
-    void emplace_back(Args&&... args) {
-        m_v.emplace_back(std::forward<Args>(args)...);
-        m_s.emplace_back(std::forward<Args>(args)...);
-        assert_eq();
-    }
-
-    template <class... Args>
-    void emplace_at(size_t idx, Args&&... args) {
-        m_v.emplace(m_v.begin() + idx, std::forward<Args>(args)...);
-        m_s.emplace(m_s.cbegin() + idx, std::forward<Args>(args)...);
-        assert_eq();
-    }
-
-    [[nodiscard]] auto size() const -> size_t {
-        return m_v.size();
-    }
-};
+#include <vector>
 
 TEST_CASE("emplace") {
     auto counts = Counter();

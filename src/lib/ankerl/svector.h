@@ -703,7 +703,7 @@ public:
     }
 
     template <class... Args>
-    void emplace(const_iterator pos, Args&&... args) {
+    auto emplace(const_iterator pos, Args&&... args) -> iterator {
         auto* p = const_cast<T*>(pos); // NOLINT(cppcoreguidelines-pro-type-const-cast)
         auto s = size();
         if (s == capacity()) {
@@ -719,10 +719,10 @@ public:
 
             // move everything [pos, end]
             std::uninitialized_move(p, end(), target_pos + 1);
-            
+
             target.template set_size<direction::indirect>(s + 1);
             *this = std::move(target);
-            return;
+            return target_pos;
 
             // old, simpler handling, but not as efficient
             // auto offset = std::distance(cbegin(), pos);
@@ -737,6 +737,15 @@ public:
         // we could also create & move, but I think constructing inplace is nicer.
         new (static_cast<void*>(p)) T(std::forward<Args>(args)...);
         set_size(s + 1);
+        return p;
+    }
+
+    auto insert(const_iterator pos, T const& value) -> iterator {
+        return emplace(pos, value);
+    }
+
+    auto insert(const_iterator pos, T&& value) -> iterator {
+        return emplace(pos, std::move(value));
     }
 };
 
