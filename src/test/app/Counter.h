@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <functional>
 #include <iosfwd>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 
@@ -65,6 +66,9 @@ struct Counter {
     static size_t staticDefaultCtor; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
     static size_t staticDtor;        // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 };
+
+// Throws an exception, this overload should never be taken!
+inline auto operator new(size_t s, Counter::Obj* ptr) -> void*;
 
 auto operator<<(std::ostream& os, Counter const& c) -> std::ostream&;
 

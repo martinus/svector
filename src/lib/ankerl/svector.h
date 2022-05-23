@@ -116,7 +116,7 @@ class svector {
             std::memcpy(target_ptr, source_ptr, size * sizeof(T));
         } else {
             for (size_t i = 0; i != size; ++i) {
-                new (target_ptr) T(std::move(*source_ptr));
+                new (static_cast<void*>(target_ptr)) T(std::move(*source_ptr));
                 source_ptr->~T();
                 ++target_ptr;
                 ++source_ptr;
@@ -249,7 +249,7 @@ class svector {
         } else {
             auto* d = data<D>();
             for (auto ptr = d + current_size, end = d + count; ptr != end; ++ptr) {
-                new (ptr) T(std::forward<Args>(args)...);
+                new (static_cast<void*>(ptr)) T(std::forward<Args>(args)...);
             }
         }
         set_size<D>(count);
@@ -275,7 +275,7 @@ class svector {
         auto ptr = data();
         auto end = ptr + s;
         while (ptr != end) {
-            new (ptr) T(*first);
+            new (static_cast<void*>(ptr)) T(*first);
             ++first;
             ++ptr;
         }
@@ -292,7 +292,7 @@ class svector {
             auto s = other.size<direction::direct>();
             auto* otherEnd = other_ptr + s;
             while (other_ptr != otherEnd) {
-                new (ptr) T(std::move(*other_ptr));
+                new (static_cast<void*>(ptr)) T(std::move(*other_ptr));
                 other_ptr->~T();
                 ++ptr;
                 ++other_ptr;
@@ -523,11 +523,11 @@ public:
 
         if (is_dir) {
             set_size<direction::direct>(s + 1);
-            return *new (data<direction::direct>() + s) T(std::forward<Args>(args)...);
+            return *new (static_cast<void*>(data<direction::direct>() + s)) T(std::forward<Args>(args)...);
         }
 
         set_size<direction::indirect>(s + 1);
-        return *new (data<direction::indirect>() + s) T(std::forward<Args>(args)...);
+        return *new (static_cast<void*>(data<direction::indirect>() + s)) T(std::forward<Args>(args)...);
     }
 
     void push_back(T const& value) {
@@ -695,7 +695,7 @@ public:
         auto target = data();
 
         while (source != source_end) {
-            new (target) T(std::move(*source));
+            new (static_cast<void*>(target)) T(std::move(*source));
             ++source;
             ++target;
         }
@@ -715,7 +715,7 @@ public:
             auto* target_pos = std::uninitialized_move(begin(), p, target.template data<direction::indirect>());
 
             // create what we're inserting
-            new (target_pos) T(std::forward<Args>(args)...);
+            new (static_cast<void*>(target_pos)) T(std::forward<Args>(args)...);
 
             // move everything [pos, end]
             std::uninitialized_move(p, end(), target_pos + 1);
@@ -735,7 +735,7 @@ public:
             p->~T();
         }
         // we could also create & move, but I think constructing inplace is nicer.
-        new (p) T(std::forward<Args>(args)...);
+        new (static_cast<void*>(p)) T(std::forward<Args>(args)...);
         set_size(s + 1);
     }
 };

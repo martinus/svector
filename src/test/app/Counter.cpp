@@ -194,5 +194,9 @@ auto operator<<(std::ostream& os, Counter const& c) -> std::ostream& {
     return os << c.m_records;
 }
 
+auto operator new(size_t /*unused*/, Counter::Obj* /*unused*/) -> void* {
+    throw std::runtime_error("operator new overload is taken! Cast to void* to ensure the void pointer overload is taken.");
+}
 size_t Counter::staticDefaultCtor = 0; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 size_t Counter::staticDtor = 0;        // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
+
