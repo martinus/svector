@@ -26,8 +26,8 @@ TEST_CASE("insert_single") {
             auto vb = vec_b;
 
             // moved
-            auto ita = va.insert(va.cbegin() + i, "999");
-            auto itb = vb.insert(vb.cbegin() + i, "999");
+            auto* ita = va.insert(va.cbegin() + std::ptrdiff_t(i), "999");
+            auto itb = vb.insert(vb.cbegin() + std::ptrdiff_t(i), "999");
             REQUIRE(*ita == *itb);
             *ita += 'x';
             *itb += 'x';
@@ -35,7 +35,7 @@ TEST_CASE("insert_single") {
             // constexpr => copied
             std::string x = "asdf";
             ita = va.insert(va.cbegin() + i, x);
-            itb = vb.insert(vb.cbegin() + i, x);
+            itb = vb.insert(vb.cbegin() + std::ptrdiff_t(i), x);
             REQUIRE(*ita == x);
             *ita += 'g';
             *itb += 'g';
@@ -64,8 +64,8 @@ TEST_CASE("insert_copies") {
 
             // moved
             auto c = Counter::Obj(999, counts);
-            auto ita = va.insert(va.cbegin() + i, 7, c);
-            auto itb = vb.insert(vb.cbegin() + i, 7, c);
+            auto* ita = va.insert(va.cbegin() + i, 7, c);
+            auto itb = vb.insert(vb.cbegin() + std::ptrdiff_t(i), 7, c);
             REQUIRE(*ita == *itb);
             assert_eq(va, vb);
         }
@@ -141,8 +141,8 @@ TEST_CASE("insert_input_iterator") {
     vb.insert(vb.end(), it_begin, it_end);
     assert_eq(va, vb);
 
-    auto ita = va.insert(va.begin() + va.size() / 2, data.begin(), data.end());
-    auto itb = vb.insert(vb.begin() + vb.size() / 2, data.begin(), data.end());
+    auto ita = va.insert(va.begin() + std::ptrdiff_t(va.size()) / 2, data.begin(), data.end());
+    auto* itb = vb.insert(vb.begin() + vb.size() / 2, data.begin(), data.end());
     REQUIRE(*ita == *itb);
     assert_eq(va, vb);
 
