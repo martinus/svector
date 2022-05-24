@@ -30,3 +30,12 @@ TEST_CASE("reserve") {
     REQUIRE(a.size() == 1);
     REQUIRE(a[0].get() == 123);
 }
+
+TEST_CASE("reserve_direct") {
+    auto counts = Counter();
+    auto a = ankerl::svector<Counter::Obj, 3>();
+    a.emplace_back(1234, counts);
+    for (size_t i = 0; i < 100; ++i) {
+        a.reserve(i);
+    }
+}

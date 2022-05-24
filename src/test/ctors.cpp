@@ -38,6 +38,12 @@ TEST_CASE("ctor_count") {
     REQUIRE(counts.copyCtor == 7);
     REQUIRE(counts.moveCtor == 0);
     REQUIRE(sv.size() == 7);
+    REQUIRE(sv.capacity() == 7);
+
+    auto x = ankerl::svector<Counter::Obj, 7>(3);
+    REQUIRE(x.size() == 3);
+    REQUIRE(x.capacity() == 7);
+    REQUIRE(x[0] == Counter::Obj{});
 }
 
 TEST_CASE("ctor_count_big") {

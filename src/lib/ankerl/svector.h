@@ -721,12 +721,7 @@ public:
             return;
         }
 
-        auto tmp = std::move(*this);
-
-        // moved-from this is now in default constructed mode.
-        reserve(s);
-        std::uninitialized_move_n(tmp.data(), s, data());
-        set_size(s);
+        realloc(new_capacity);
     }
 
     template <class... Args>
