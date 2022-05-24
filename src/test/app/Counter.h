@@ -41,6 +41,7 @@ struct Counter {
     };
 
     Counter();
+    ~Counter();
 
     size_t ctor{};
     size_t defaultCtor{};

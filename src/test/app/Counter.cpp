@@ -166,6 +166,14 @@ Counter::Counter() {
     Counter::staticDtor = 0;
 }
 
+Counter::~Counter() {
+    // check that all are destructed
+    if (!singletonConstructedObjects().empty()) {
+        print("ERROR at ~Counter(): got {} objects still alive!", singletonConstructedObjects().size());
+        std::abort();
+    }
+}
+
 auto Counter::total() const -> size_t {
     return ctor + staticDefaultCtor + copyCtor + (dtor + staticDtor) + equals + less + assign + swaps + get + constGet + hash +
            moveCtor + moveAssign;
@@ -199,4 +207,3 @@ auto operator new(size_t /*unused*/, Counter::Obj* /*unused*/) -> void* {
 }
 size_t Counter::staticDefaultCtor = 0; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 size_t Counter::staticDtor = 0;        // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
-

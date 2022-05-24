@@ -73,7 +73,8 @@ struct storage : public header {
         // make sure the lowest significant bit is 0
         auto intPtr = reinterpret_cast<std::uintptr_t>(ptr);
         if ((intPtr & 1U) != 0U) {
-            throw std::bad_alloc(); // TODO use a better fitting exception?
+            // TODO use a better fitting exception?
+            throw std::bad_alloc(); // LCOV_EXCL_LINE
         }
 
         return new (ptr) storage<T>(capacity);
@@ -89,11 +90,12 @@ class svector {
     enum class direction { direct, indirect };
 
     // TODO what about big endianness?
-    struct Direct {
+    class Direct {
         uint8_t m_is_direct : 1;                                  // NOLINT(misc-non-private-member-variables-in-classes)
         uint8_t m_size : 7;                                       // NOLINT(misc-non-private-member-variables-in-classes)
         alignas(T) std::array<std::byte, sizeof(T) * N> m_buffer; // NOLINT(misc-non-private-member-variables-in-classes)
 
+    public:
         auto data() -> T* {
             return reinterpret_cast<T*>(m_buffer.data());
         }
@@ -101,14 +103,36 @@ class svector {
         auto data() const -> T const* {
             return reinterpret_cast<T const*>(m_buffer.data());
         }
+
+        [[nodiscard]] auto size() const -> size_t {
+            return m_size;
+        }
+
+        void size(size_t s) {
+            m_size = s;
+        }
+
+        [[nodiscard]] auto is_direct() const -> bool {
+            return m_is_direct;
+        }
+
+        void is_direct(bool b) {
+            m_is_direct = b ? 1 : 0;
+        }
+
+        void reset() {
+            m_is_direct = 1;
+            m_size = 0;
+        }
     };
+
     union {
         Direct m_direct;
         detail::storage<T>* m_indirect;
     } m_union;
 
     [[nodiscard]] auto is_direct() const -> bool {
-        return m_union.m_direct.m_is_direct;
+        return m_union.m_direct.is_direct();
     }
 
     static void uninitialized_move_and_destroy(T* source_ptr, T* target_ptr, size_t size) {
@@ -130,8 +154,8 @@ class svector {
                 // indirect -> direct
                 auto* storage = m_union.m_indirect;
                 uninitialized_move_and_destroy(storage->data(), m_union.m_direct.data(), storage->size());
-                m_union.m_direct.m_size = storage->size();
-                m_union.m_direct.m_is_direct = 1;
+                m_union.m_direct.size(storage->size());
+                m_union.m_direct.is_direct(true);
                 delete storage;
             }
         } else {
@@ -177,7 +201,7 @@ class svector {
     template <direction D>
     [[nodiscard]] auto size() const -> size_t {
         if constexpr (D == direction::direct) {
-            return m_union.m_direct.m_size;
+            return m_union.m_direct.size();
         } else {
             return m_union.m_indirect->size();
         }
@@ -194,16 +218,16 @@ class svector {
     template <direction D>
     void set_size(size_t s) {
         if constexpr (D == direction::direct) {
-            m_union.m_direct.m_size = s;
+            m_union.m_direct.size(s);
         } else {
-            return m_union.m_indirect->size(s);
+            m_union.m_indirect->size(s);
         }
     }
 
     template <direction D>
     [[nodiscard]] auto data() -> T* {
         if constexpr (D == direction::direct) {
-            return std::launder(reinterpret_cast<T*>(m_union.m_direct.m_buffer.data()));
+            return std::launder(reinterpret_cast<T*>(m_union.m_direct.data()));
         } else {
             return std::launder(m_union.m_indirect->data());
         }
@@ -212,7 +236,7 @@ class svector {
     template <direction D>
     [[nodiscard]] auto data() const -> T const* {
         if constexpr (D == direction::direct) {
-            return std::launder(reinterpret_cast<T const*>(m_union.m_direct.m_buffer.data()));
+            return std::launder(reinterpret_cast<T const*>(m_union.m_direct.data()));
         } else {
             return std::launder(m_union.m_indirect->data());
         }
@@ -284,8 +308,7 @@ class svector {
             std::destroy(other_ptr, other_end);
             set_size(s);
         }
-        other.m_union.m_direct.m_is_direct = 1;
-        other.m_union.m_direct.m_size = 0;
+        other.m_union.m_direct.reset();
     }
 
     /**
@@ -382,8 +405,7 @@ public:
     using const_reverse_iterator = std::reverse_iterator<const_iterator>;
 
     svector() {
-        m_union.m_direct.m_is_direct = 1;
-        m_union.m_direct.m_size = 0;
+        m_union.m_direct.reset();
     }
 
     svector(size_t count, T const& value)
@@ -511,7 +533,7 @@ public:
 
     [[nodiscard]] auto data() const -> T const* {
         if (is_direct()) {
-            return reinterpret_cast<T const*>(m_union.m_direct.m_buffer.data());
+            return reinterpret_cast<T const*>(m_union.m_direct.data());
         }
         return m_union.m_indirect->data();
     }

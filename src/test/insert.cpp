@@ -152,6 +152,14 @@ TEST_CASE("insert_input_iterator") {
     va.insert(va.begin(), data.begin(), data.end());
     vb.insert(vb.begin(), data.begin(), data.end());
     assert_eq(va, vb);
+
+    va.insert(va.begin() + 3, data.begin(), data.begin());
+    vb.insert(vb.begin() + 3, data.begin(), data.begin());
+    assert_eq(va, vb);
+
+    va.insert(va.begin() + 3, it_begin, it_begin);
+    vb.insert(vb.begin() + 3, it_begin, it_begin);
+    assert_eq(va, vb);
 }
 
 // iterator insert(const_iterator pos, std::initializer_list<T> ilist);
