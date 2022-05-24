@@ -148,9 +148,8 @@ class svector {
         if (new_capacity <= N) {
             // put everything into direct storage
 
-            if (is_direct()) {
-                // direct -> direct: nothing to do!
-            } else {
+            // direct -> direct: nothing to do!
+            if (!is_direct()) {
                 // indirect -> direct
                 auto* storage = m_union.m_indirect;
                 uninitialized_move_and_destroy(storage->data(), m_union.m_direct.data(), storage->size());
