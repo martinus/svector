@@ -272,6 +272,20 @@ class svector {
         set_size<D>(count);
     }
 
+    // Makes sure that to is not past the end iterator
+    template <direction D>
+    auto erase_checked_end(T const* cfrom, T const* to) -> T* {
+        auto* const erase_begin = const_cast<T*>(cfrom); // NOLINT(cppcoreguidelines-pro-type-const-cast)
+        auto* const container_end = data<D>() + size<D>();
+        auto* const erase_end = std::min(const_cast<T*>(to), container_end); // NOLINT(cppcoreguidelines-pro-type-const-cast)
+
+        std::move(erase_end, container_end, erase_begin);
+        auto const num_erased = std::distance(erase_begin, erase_end);
+        std::destroy(container_end - num_erased, container_end);
+        set_size<D>(size<D>() - num_erased);
+        return erase_begin;
+    }
+
     template <typename It>
     void assign(It first, It last, std::input_iterator_tag /*unused*/) {
         clear();
@@ -777,6 +791,17 @@ public:
 
     auto insert(const_iterator pos, std::initializer_list<T> l) -> iterator {
         return insert(pos, l.begin(), l.end());
+    }
+
+    auto erase(const_iterator pos) -> iterator {
+        return erase(pos, pos + 1);
+    }
+
+    auto erase(const_iterator first, const_iterator last) -> iterator {
+        if (is_direct()) {
+            return erase_checked_end<direction::direct>(first, last);
+        }
+        return erase_checked_end<direction::indirect>(first, last);
     }
 };
 
