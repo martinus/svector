@@ -175,7 +175,12 @@ class svector {
     }
 
     [[nodiscard]] static auto calculate_new_capacity(size_t size_to_fit, size_t starting_capacity) -> size_t {
-        auto new_capacity = starting_capacity;
+        if (size_to_fit == 0) {
+            // special handling for 0 so N==0 works
+            return starting_capacity;
+        }
+        // start with at least 1, so N==0 works
+        auto new_capacity = std::max<size_t>(1, starting_capacity);
 
         // double capacity until its large enough, but make sure we don't overflow
         while (new_capacity < size_to_fit && new_capacity * 2 > new_capacity) {

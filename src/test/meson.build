@@ -17,6 +17,7 @@ test_sources = [
     'includes_only.cpp',
     'insert.cpp',
     'member_types.cpp',
+    'n_eq_0.cpp',
     'pop_back.cpp',
     'push_back.cpp',
     'reserve.cpp',

@@ -1,9 +1,20 @@
-# compile with
+# meson commands cheat sheet:
 #
-# CXX="ccache clang++" meson setup --buildtype release build/clang_release
-# CXX="ccache clang++" meson setup build/clang_debug
-# meson setup --buildtype release build/g++_release
-# meson setup build/g++_debug
+# # Setup ###################
+#
+# release & debug setup
+#      CXX="ccache clang++" meson setup --buildtype release build/clang_release
+#      CXX="ccache clang++" meson setup build/clang_debug
+# c++20 build
+#     CXX="ccache clang++" meson setup -Dcpp_std=c++20 build/clang_cpp20
+# lcov coverage:
+#     CXX="ccache clang++" meson setup -Db_coverage=true build/coverage
+#
+# # Testing ################
+#
+# Run with valgrind:
+#     meson test --wrap='valgrind --leak-check=full --error-exitcode=1'
+#
 
 project('svector', 'cpp',
     version: '1.0.0',
