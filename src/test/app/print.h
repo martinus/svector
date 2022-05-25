@@ -2,8 +2,8 @@
 
 #include <cstdio>
 
-template <typename S, typename... Args>
-void print(S const& format, Args&&... args) {
-    fmt::print(format, std::forward<Args>(args)...);
+template <typename... Args>
+constexpr void print(fmt::format_string<Args...> f, Args&&... args) {
+    fmt::print(f, std::forward<Args>(args)...);
     std::fflush(stdout);
 }
