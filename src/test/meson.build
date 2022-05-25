@@ -24,6 +24,7 @@ test_sources = [
     'reverse_iterators.cpp',
     'show_comparison.cpp',
     'shrink_to_fit.cpp',
+    'std_erase.cpp',
     'swap.cpp',
 ]
 

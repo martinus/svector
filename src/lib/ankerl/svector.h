@@ -831,4 +831,25 @@ template <typename T, size_t NA, size_t NB>
 
 } // namespace ankerl
 
+// NOLINTNEXTLINE(cert-dcl58-cpp)
+namespace std {
+
+template <class T, size_t N, class U>
+constexpr auto erase(ankerl::svector<T, N>& sv, U const& value) -> typename ankerl::svector<T, N>::size_type {
+    auto* removed_begin = std::remove(sv.begin(), sv.end(), value);
+    auto num_removed = std::distance(removed_begin, sv.end());
+    sv.erase(removed_begin, sv.end());
+    return num_removed;
+}
+
+template <class T, size_t N, class Pred>
+constexpr auto erase_if(ankerl::svector<T, N>& sv, Pred pred) -> typename ankerl::svector<T, N>::size_type {
+    auto* removed_begin = std::remove_if(sv.begin(), sv.end(), pred);
+    auto num_removed = std::distance(removed_begin, sv.end());
+    sv.erase(removed_begin, sv.end());
+    return num_removed;
+}
+
+} // namespace std
+
 #endif
