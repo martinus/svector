@@ -25,11 +25,4 @@ Note that boost's `small_vector` cheats a bit. E.g. `boost::container::small_vec
 
 ## Disclaimer
 
-`ankerl::svector` is new, relatively untested, not feature complete. Using it might set your computer on fire.
-
-## TODO
-
-* Implement most of [std::vector's API](https://en.cppreference.com/w/cpp/container/vector)
-* More tests, tests, tests!
-* Make it work on big endian machines too
-* Benchmarks, optimization
+`ankerl::svector` is new and relatively untested! I have implemented and tested all of std::vector's API though, and have 100% test coverage. Still, using it might set your computer on fire.
