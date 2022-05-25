@@ -3,7 +3,6 @@
 #include <app/Counter.h>
 
 #include <doctest.h>
-#include <stdexcept>
 
 TEST_CASE("erase_single") {
     auto counts = Counter();
