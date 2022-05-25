@@ -25,6 +25,20 @@ using enable_if_t = typename std::enable_if<Condition::value, T>::type;
 template <typename It>
 using is_input_iterator = std::is_base_of<std::input_iterator_tag, typename std::iterator_traits<It>::iterator_category>;
 
+constexpr auto round_up(size_t n, size_t multiple) -> size_t {
+    return ((n + (multiple - 1)) / multiple) * multiple;
+}
+
+template <typename T>
+constexpr auto cx_min(T a, T b) -> T {
+    return a < b ? a : b;
+}
+
+template <typename T>
+constexpr auto cx_max(T a, T b) -> T {
+    return a > b ? a : b;
+}
+
 class header {
     size_t m_size{};
     size_t const m_capacity;
@@ -50,7 +64,7 @@ template <typename T>
 struct storage : public header {
     static constexpr auto alignment_of_t = std::alignment_of_v<T>;
     static constexpr auto max_Alignment = std::max(std::alignment_of_v<header>, std::alignment_of_v<T>);
-    static constexpr auto offset_to_data = ((sizeof(header) + alignment_of_t - 1) / alignment_of_t) * alignment_of_t;
+    static constexpr auto offset_to_data = detail::round_up(sizeof(header), alignment_of_t);
     static_assert(max_Alignment <= __STDCPP_DEFAULT_NEW_ALIGNMENT__);
 
     explicit storage(size_t capacity)
@@ -81,11 +95,19 @@ struct storage : public header {
     }
 };
 
+template <typename T>
+constexpr auto automatic_capacity(size_t min_inline_capacity) -> size_t {
+    // + 1 for one byte size in direct mode
+    auto size_of_svector = round_up(sizeof(T) * min_inline_capacity + 1, sizeof(void*));
+    return cx_min((size_of_svector - 1U) / sizeof(T), size_t(127));
+}
+
 } // namespace detail
 
-template <typename T, size_t N>
+template <typename T, size_t MinInlineCapacity>
 class svector {
-    static_assert(N <= 127, "sorry, can't have more than 127 direct elements (yet)");
+    static_assert(MinInlineCapacity <= 127, "sorry, can't have more than 127 direct elements");
+    static constexpr auto N = detail::automatic_capacity<T>(MinInlineCapacity);
 
     enum class direction { direct, indirect };
 
@@ -644,7 +666,7 @@ public:
     }
 
     [[nodiscard]] auto rbegin() const -> const_reverse_iterator {
-        return const_reverse_iterator{end()};
+        return crbegin();
     }
 
     [[nodiscard]] auto crbegin() const -> const_reverse_iterator {
@@ -656,7 +678,7 @@ public:
     }
 
     [[nodiscard]] auto rend() const -> const_reverse_iterator {
-        return const_reverse_iterator{begin()};
+        return crend();
     }
 
     [[nodiscard]] auto crend() const -> const_reverse_iterator {

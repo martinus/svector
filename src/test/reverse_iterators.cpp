@@ -2,6 +2,8 @@
 
 #include <doctest.h>
 
+#include <string_view>
+
 using namespace std::literals;
 
 TEST_CASE("rbegin_rend") {
@@ -21,4 +23,13 @@ TEST_CASE("rbegin_rend") {
     *it = 'x';
     REQUIRE(*it == 'x');
     REQUIRE(*itc == 'x');
+
+    auto const& ca = a;
+    auto itc2 = ca.rbegin();
+    auto v2 = ankerl::svector<char, 0>();
+    while (itc2 != ca.rend()) {
+        v2.push_back(*itc2);
+        ++itc2;
+    }
+    REQUIRE(std::string_view(v2.data(), v2.size()) == "!xlrow olleh");
 }
