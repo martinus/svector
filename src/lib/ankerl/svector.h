@@ -388,21 +388,15 @@ class svector {
         }
     }
 
+    // performs a const_cast so we don't need this implementation twice
     template <direction D>
-    auto at(size_t idx) const -> T const& {
+    auto at(size_t idx) const -> T& {
         if (idx >= size<D>()) {
             throw std::out_of_range{"svector: idx out of range"};
         }
-        return *(data<D>() + idx);
-    }
-
-    template <direction D>
-    auto at(size_t idx) -> T& {
-        if (idx >= size<D>()) {
-            throw std::out_of_range{"svector: idx out of range"};
-        }
-        return *(data<D>() + idx);
-    }
+        auto* ptr = const_cast<T*>(data<D>() + idx); // NOLINT(cppcoreguidelines-pro-type-const-cast)
+        return *ptr;
+    } // LCOV_EXCL_LINE why is this single } marked as not covered? gcov bug?
 
 public:
     using value_type = T;

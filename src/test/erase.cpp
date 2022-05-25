@@ -16,7 +16,7 @@ TEST_CASE("erase_single") {
     REQUIRE(sv.end() == sv.erase(sv.cend()));
     REQUIRE(sv.size() == 100);
 
-    auto it = sv.erase(sv.begin());
+    auto* it = sv.erase(sv.begin());
     REQUIRE(it->get() == 1);
     REQUIRE(sv.size() == 99);
     for (size_t i = 0; i < sv.size(); ++i) {
