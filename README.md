@@ -7,7 +7,7 @@ There are lots of small vector implementations ([absl](https://github.com/abseil
 
 The smallest `ankerl::svector` is just 8 bytes large (on 64bit machines). E.g. `ankerl::svector<std::byte, 7>` can store 7 bytes inline on the stack without allocating, yet it's `sizeof()` is only 8. As far as I know, no other implementation is that compact. Most implementation need at least 24 or 32 bytes.
 
-Here is a table comparing the amount of bytes you can store on the heap for a given total heap size of the vector:
+Here is a table comparing the amount of bytes you can store on the stack for a given total stack size of the vector:
 
 |                                  |  8  |  16  |  24  |  32  |  40  |  48  |  56  |  64  |
 |----------------------------------|----:|-----:|-----:|-----:|-----:|-----:|-----:|-----:|
@@ -21,7 +21,7 @@ In short:
 * 8 bytes overhead for `absl::InlinedVector`
 * 1 (one!) byte overhead for `ankerl::svector`.
 
-Note that boost's `small_vector` cheats a bit. E.g. `boost::container::small_vector<std::byte, 15>` won't give you 15 elements on the heap, but only 8 bytes. It seems to round down to the closest multiple of 8 bytes.
+Note that boost's `small_vector` cheats a bit. E.g. `boost::container::small_vector<std::byte, 15>` won't give you 15 elements on the stack, but only 8 bytes. It seems to round down to the closest multiple of 8 bytes.
 
 ## Disclaimer
 
