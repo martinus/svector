@@ -5,7 +5,7 @@
 `ankerl::svector` is an `std::vector`-like container that can hold some elements on the heap without the need for any allocation.
 There are lots of small vector implementations ([absl](https://github.com/abseil/abseil-cpp/blob/master/absl/container/inlined_vector.h), [boost](https://www.boost.org/doc/libs/1_79_0/doc/html/boost/container/small_vector.html), [folly](https://github.com/facebook/folly/blob/main/folly/docs/small_vector.md), [llvm](https://llvm.org/doxygen/classllvm_1_1SmallVector.html), ...) but this here is special by how compact it is.
 
-The smallest `ankerl::svector` is just 8 bytes large (on 64bit machines). E.g. `ankerl::svector<std::byte, 7>` can store 7 bytes on the heap without allocating, yet it's `sizeof()` is only 8. As far as I know, no other implementation is that compact. Most implementation need at least 24 or 32 bytes.
+The smallest `ankerl::svector` is just 8 bytes large (on 64bit machines). E.g. `ankerl::svector<std::byte, 7>` can store 7 bytes inline on the stack without allocating, yet it's `sizeof()` is only 8. As far as I know, no other implementation is that compact. Most implementation need at least 24 or 32 bytes.
 
 Here is a table comparing the amount of bytes you can store on the heap for a given total heap size of the vector:
 
