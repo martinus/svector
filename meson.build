@@ -9,6 +9,7 @@
 #     CXX="ccache clang++" meson setup -Dcpp_std=c++20 build/clang_cpp20
 # lcov coverage:
 #     CXX="ccache clang++" meson setup -Db_coverage=true build/coverage
+#     ninja clean && ninja test && ninja coverage
 #
 # # Testing ################
 #

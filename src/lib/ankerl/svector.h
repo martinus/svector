@@ -72,34 +72,34 @@ struct storage : public header {
 
     auto data() -> T* {
         auto ptr_to_data = reinterpret_cast<std::byte*>(this) + offset_to_data;
-        return reinterpret_cast<T*>(ptr_to_data);
+        return std::launder(reinterpret_cast<T*>(ptr_to_data));
     }
 
     auto data() const -> T const* {
-        auto ptr_to_data = reinterpret_cast<std::byte const*>(this) + offset_to_data;
-        return reinterpret_cast<T const*>(ptr_to_data);
+        return const_cast<storage*>(this)->data(); // NOLINT(cppcoreguidelines-pro-type-const-cast)
     }
 
     static auto alloc(size_t capacity) -> storage<T>* {
         // only void* is allowed to be converted to uintptr_t
         void* ptr = ::operator new(offset_to_data + sizeof(T) * capacity);
-
-        // make sure the lowest significant bit is 0
-        auto intPtr = reinterpret_cast<std::uintptr_t>(ptr);
-        if ((intPtr & 1U) != 0U) {
-            // TODO use a better fitting exception?
-            throw std::bad_alloc(); // LCOV_EXCL_LINE
-        }
-
         return new (ptr) storage<T>(capacity);
     }
 };
 
 template <typename T>
-constexpr auto automatic_capacity(size_t min_inline_capacity) -> size_t {
+constexpr auto alignment_of_svector() -> size_t {
+    return cx_max(sizeof(void*), std::alignment_of_v<T>);
+}
+
+template <typename T>
+constexpr auto size_of_svector(size_t min_inline_capacity) -> size_t {
     // + 1 for one byte size in direct mode
-    auto size_of_svector = round_up(sizeof(T) * min_inline_capacity + 1, sizeof(void*));
-    return cx_min((size_of_svector - 1U) / sizeof(T), size_t(127));
+    return round_up(sizeof(T) * min_inline_capacity + 1, alignment_of_svector<T>());
+}
+
+template <typename T>
+constexpr auto automatic_capacity(size_t min_inline_capacity) -> size_t {
+    return cx_min((size_of_svector<T>(min_inline_capacity) - 1U) / sizeof(T), size_t(127));
 }
 
 } // namespace detail
@@ -111,50 +111,55 @@ class svector {
 
     enum class direction { direct, indirect };
 
-    // TODO what about big endianness?
-    class Direct {
-        uint8_t m_is_direct : 1;                                  // NOLINT(misc-non-private-member-variables-in-classes)
-        uint8_t m_size : 7;                                       // NOLINT(misc-non-private-member-variables-in-classes)
-        alignas(T) std::array<std::byte, sizeof(T) * N> m_buffer; // NOLINT(misc-non-private-member-variables-in-classes)
+    // A buffer to hold the data of the svector Depending on direct/indirect mode, the content it holds is like so:
+    // direct:
+    //  m_data[0] & 1: lowest bit is 1 for direct mode.
+    //  m_data[0] >> 1: size for direct mode
+    //  Then 0-X bytes unused (padding), and then the actual inline T data.
+    // indirect:
+    //  m_data[0] & 1: lowest bit is 0 for indirect mode
+    //  m_data[0..7]: stores an uintptr_t, which points to the indirect data.
 
-    public:
-        auto data() -> T* {
-            return reinterpret_cast<T*>(m_buffer.data());
-        }
-
-        auto data() const -> T const* {
-            return reinterpret_cast<T const*>(m_buffer.data());
-        }
-
-        [[nodiscard]] auto size() const -> size_t {
-            return m_size;
-        }
-
-        void size(size_t s) {
-            m_size = s;
-        }
-
-        [[nodiscard]] auto is_direct() const -> bool {
-            return m_is_direct;
-        }
-
-        void is_direct(bool b) {
-            m_is_direct = b ? 1 : 0;
-        }
-
-        void reset() {
-            m_is_direct = 1;
-            m_size = 0;
-        }
-    };
-
-    union {
-        Direct m_direct;
-        detail::storage<T>* m_indirect;
-    } m_union;
+    alignas(detail::alignment_of_svector<T>()) std::array<uint8_t, detail::size_of_svector<T>(MinInlineCapacity)> m_data;
 
     [[nodiscard]] auto is_direct() const -> bool {
-        return m_union.m_direct.is_direct();
+        return (m_data[0] & 1U) != 0U;
+    }
+
+    [[nodiscard]] auto indirect() -> detail::storage<T>* {
+        detail::storage<T>* ptr; // NOLINT(cppcoreguidelines-init-variables)
+        std::memcpy(&ptr, m_data.data(), sizeof(ptr));
+        return ptr;
+    }
+
+    [[nodiscard]] auto indirect() const -> detail::storage<T> const* {
+        return const_cast<svector*>(this)->indirect(); // NOLINT(cppcoreguidelines-pro-type-const-cast)
+    }
+
+    void set_indirect(detail::storage<T>* ptr) {
+        std::memcpy(m_data.data(), &ptr, sizeof(ptr));
+
+        // safety check to guarantee the lowest bit is 0
+        if (is_direct()) {
+            throw std::bad_alloc(); // LCOV_EXCL_LINE
+        }
+    }
+
+    [[nodiscard]] auto direct_size() const -> size_t {
+        return m_data[0] >> 1U;
+    }
+
+    // sets size of direct mode and mode to direct too.
+    constexpr void set_direct_and_size(size_t s) {
+        m_data[0] = (s << 1U) | 1U;
+    }
+
+    [[nodiscard]] auto direct_data() const -> T const* {
+        return std::launder(reinterpret_cast<T const*>(m_data.data() + std::alignment_of_v<T>));
+    }
+
+    [[nodiscard]] auto direct_data() -> T* {
+        return std::launder(reinterpret_cast<T*>(m_data.data() + std::alignment_of_v<T>));
     }
 
     static void uninitialized_move_and_destroy(T* source_ptr, T* target_ptr, size_t size) {
@@ -173,10 +178,9 @@ class svector {
             // direct -> direct: nothing to do!
             if (!is_direct()) {
                 // indirect -> direct
-                auto* storage = m_union.m_indirect;
-                uninitialized_move_and_destroy(storage->data(), m_union.m_direct.data(), storage->size());
-                m_union.m_direct.size(storage->size());
-                m_union.m_direct.is_direct(true);
+                auto* storage = indirect();
+                uninitialized_move_and_destroy(storage->data(), direct_data(), storage->size());
+                set_direct_and_size(storage->size());
                 delete storage;
             }
         } else {
@@ -190,9 +194,9 @@ class svector {
                 // indirect -> indirect
                 uninitialized_move_and_destroy(data<direction::indirect>(), storage->data(), size<direction::indirect>());
                 storage->size(size<direction::indirect>());
-                delete m_union.m_indirect;
+                delete indirect();
             }
-            m_union.m_indirect = storage;
+            set_indirect(storage);
         }
     }
 
@@ -220,16 +224,16 @@ class svector {
         if constexpr (D == direction::direct) {
             return N;
         } else {
-            return m_union.m_indirect->capacity();
+            return indirect()->capacity();
         }
     }
 
     template <direction D>
     [[nodiscard]] auto size() const -> size_t {
         if constexpr (D == direction::direct) {
-            return m_union.m_direct.size();
+            return direct_size();
         } else {
-            return m_union.m_indirect->size();
+            return indirect()->size();
         }
     }
 
@@ -244,28 +248,24 @@ class svector {
     template <direction D>
     void set_size(size_t s) {
         if constexpr (D == direction::direct) {
-            m_union.m_direct.size(s);
+            set_direct_and_size(s);
         } else {
-            m_union.m_indirect->size(s);
+            indirect()->size(s);
         }
     }
 
     template <direction D>
     [[nodiscard]] auto data() -> T* {
         if constexpr (D == direction::direct) {
-            return std::launder(reinterpret_cast<T*>(m_union.m_direct.data()));
+            return direct_data();
         } else {
-            return std::launder(m_union.m_indirect->data());
+            return indirect()->data();
         }
     }
 
     template <direction D>
     [[nodiscard]] auto data() const -> T const* {
-        if constexpr (D == direction::direct) {
-            return std::launder(reinterpret_cast<T const*>(m_union.m_direct.data()));
-        } else {
-            return std::launder(m_union.m_indirect->data());
-        }
+        return const_cast<svector*>(this)->data<D>(); // NOLINT(cppcoreguidelines-pro-type-const-cast)
     }
 
     template <direction D>
@@ -338,7 +338,7 @@ class svector {
     void do_move_assign(svector&& other) {
         if (!other.is_direct()) {
             // take other's memory, even when empty
-            m_union.m_indirect = other.m_union.m_indirect;
+            set_indirect(other.indirect());
         } else {
             auto* other_ptr = other.data<direction::direct>();
             auto s = other.size<direction::direct>();
@@ -348,7 +348,7 @@ class svector {
             std::destroy(other_ptr, other_end);
             set_size(s);
         }
-        other.m_union.m_direct.reset();
+        other.set_direct_and_size(0);
     }
 
     /**
@@ -411,7 +411,7 @@ class svector {
             std::destroy_n(ptr, s);
         }
         if (!is_dir) {
-            delete m_union.m_indirect;
+            delete indirect();
         }
     }
 
@@ -439,7 +439,7 @@ public:
     using const_reverse_iterator = std::reverse_iterator<const_iterator>;
 
     svector() {
-        m_union.m_direct.reset();
+        set_direct_and_size(0);
     }
 
     svector(size_t count, T const& value)
@@ -567,9 +567,9 @@ public:
 
     [[nodiscard]] auto data() const -> T const* {
         if (is_direct()) {
-            return reinterpret_cast<T const*>(m_union.m_direct.data());
+            return direct_data();
         }
-        return m_union.m_indirect->data();
+        return indirect()->data();
     }
 
     template <class... Args>
