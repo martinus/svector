@@ -608,13 +608,15 @@ public:
             is_dir = false;
         }
 
+        T* ptr; // NOLINT(cppcoreguidelines-init-variables)
         if (is_dir) {
+            ptr = data<direction::direct>() + s;
             set_size<direction::direct>(s + 1);
-            return *new (static_cast<void*>(data<direction::direct>() + s)) T(std::forward<Args>(args)...);
+        } else {
+            ptr = data<direction::indirect>() + s;
+            set_size<direction::indirect>(s + 1);
         }
-
-        set_size<direction::indirect>(s + 1);
-        return *new (static_cast<void*>(data<direction::indirect>() + s)) T(std::forward<Args>(args)...);
+        return *new (static_cast<void*>(ptr)) T(std::forward<Args>(args)...);
     }
 
     void push_back(T const& value) {

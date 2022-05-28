@@ -2,7 +2,13 @@ test_sources = [
     'app/Counter.cpp',
     'app/doctest.cpp',
     'app/nanobench.cpp',
+
+    'bench/bench_accumulate.cpp',
+    'bench/bench_emplace_back.cpp',
+    'bench/bench_fill_front.cpp',
+    'bench/bench_fill_random.cpp',
     'bench/bench_push_pop.cpp',
+    'bench/bench_sort_shuffle.cpp',
 
     'assign.cpp',
     'assignment_operators.cpp',
