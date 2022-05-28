@@ -80,8 +80,24 @@ struct storage : public header {
     }
 
     static auto alloc(size_t capacity) -> storage<T>* {
+        // make sure we don't overflow!
+        auto mem = sizeof(T) * capacity;
+        if (mem < capacity) {
+            throw std::bad_alloc();
+        }
+        if (offset_to_data + mem < mem) {
+            throw std::bad_alloc();
+        }
+        mem += offset_to_data;
+        if (mem > std::numeric_limits<std::ptrdiff_t>::max()) {
+            throw std::bad_alloc();
+        }
+
         // only void* is allowed to be converted to uintptr_t
         void* ptr = ::operator new(offset_to_data + sizeof(T) * capacity);
+        if (nullptr == ptr) {
+            throw std::bad_alloc();
+        }
         return new (ptr) storage<T>(capacity);
     }
 };
@@ -732,7 +748,7 @@ public:
     }
 
     [[nodiscard]] auto max_size() const -> size_t {
-        return std::numeric_limits<size_t>::max();
+        return std::numeric_limits<std::ptrdiff_t>::max();
     }
 
     void swap(svector& other) {
