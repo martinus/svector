@@ -230,9 +230,9 @@ class svector {
         }
         if (new_capacity < size_to_fit) {
             // got an overflow, set capacity to max
-            new_capacity = std::numeric_limits<size_t>::max();
+            new_capacity = max_size();
         }
-        return new_capacity;
+        return std::min(new_capacity, max_size());
     }
 
     template <direction D>
@@ -747,7 +747,7 @@ public:
         }
     }
 
-    [[nodiscard]] auto max_size() const -> size_t {
+    [[nodiscard]] static auto max_size() -> size_t {
         return std::numeric_limits<std::ptrdiff_t>::max();
     }
 
