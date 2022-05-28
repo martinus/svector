@@ -61,9 +61,14 @@ test_exe = executable(
     ],
 )
 
+benchmark(
+    'bench',
+    test_exe,
+    args: ['-ns', '-ts=bench'],
+    verbose: true)
+
 test(
     'svector test',
     test_exe,
-    verbose: true # only meson 0.62
-)
+    verbose: true)
 
