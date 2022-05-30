@@ -11,6 +11,7 @@ test_sources = [
     'bench/bench_randomaccess.cpp',
     'bench/bench_sort_shuffle.cpp',
 
+    'alignment.cpp',
     'assign.cpp',
     'assignment_operators.cpp',
     'at.cpp',
