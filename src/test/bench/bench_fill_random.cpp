@@ -15,14 +15,14 @@ using namespace std::literals;
 template <typename Vec>
 void fill_random(ankerl::nanobench::Bench& bench, size_t num_items) {
     bench.batch(num_items).warmup(3).minEpochTime(10ms).run(std::string(name_of_type<Vec>()), [&] {
-        auto vec = Vec();
         auto rng = ankerl::nanobench::Rng(1234);
+        auto vec = Vec();
         for (size_t i = 0; i < num_items; ++i) {
             auto it = vec.begin() + rng.bounded(vec.size());
             if constexpr (std::is_same_v<typename Vec::value_type, std::string>) {
                 vec.emplace(it, "hello");
             } else {
-                vec.emplace(it, rng());
+                vec.emplace(it, i);
             }
         }
         ankerl::nanobench::doNotOptimizeAway(vec.data());

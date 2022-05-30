@@ -23,13 +23,13 @@ void accumulate_numeric(size_t num_items, ankerl::nanobench::Bench& bench) {
 
     bench.batch(num_items).unit("element").warmup(3).minEpochTime(10ms).run(std::string(name_of_type<Vec>()), [&] {
         auto ret = std::accumulate(vec.begin(), vec.end(), uint64_t());
-        REQUIRE(ret == 5440569445485746503);
+        REQUIRE(ret == 1576219068393533883);
     });
 }
 
 // https://github.com/wichtounet/articles/blob/master/src/vector_list/bench.cpp
 TEST_CASE("bench_accumulate_numeric" * doctest::skip() * doctest::test_suite("bench")) {
-    auto num_items = 1000;
+    auto num_items = 100;
     auto bench = ankerl::nanobench::Bench();
     bench.title("accumulate");
     bench.epochs(100);

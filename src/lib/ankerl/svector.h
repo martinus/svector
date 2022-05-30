@@ -75,10 +75,6 @@ struct storage : public header {
         return std::launder(reinterpret_cast<T*>(ptr_to_data));
     }
 
-    auto data() const -> T const* {
-        return const_cast<storage*>(this)->data(); // NOLINT(cppcoreguidelines-pro-type-const-cast)
-    }
-
     static auto alloc(size_t capacity) -> storage<T>* {
         // make sure we don't overflow!
         auto mem = sizeof(T) * capacity;
@@ -168,10 +164,6 @@ class svector {
     // sets size of direct mode and mode to direct too.
     constexpr void set_direct_and_size(size_t s) {
         m_data[0] = (s << 1U) | 1U;
-    }
-
-    [[nodiscard]] auto direct_data() const -> T const* {
-        return std::launder(reinterpret_cast<T const*>(m_data.data() + std::alignment_of_v<T>));
     }
 
     [[nodiscard]] auto direct_data() -> T* {
@@ -377,7 +369,7 @@ class svector {
      *
      * Destroys then empty elements in [source_begin, source_end(
      */
-    auto shift_right(T* source_begin, T* source_end, T* target_begin) {
+    static auto shift_right(T* source_begin, T* source_end, T* target_begin) {
         // 1. uninitialized moves
         auto const num_moves = std::distance(source_begin, source_end);
         auto const target_end = target_begin + num_moves;
@@ -387,29 +379,42 @@ class svector {
         std::destroy(source_begin, std::min(source_end, target_begin));
     }
 
-    // makes space for uninitialized data of cout elements. Also updates size.
-    auto make_uninitialized_space(T const* pos, size_t count) -> T* {
+    template <direction D>
+    [[nodiscard]] auto make_uninitialized_space_new(size_t s, T* p, size_t count) -> T* {
+        auto target = svector();
+        // we know target is indirect because we're increasing capacity
+        target.reserve(s + count);
+
+        // move everything [begin, pos[
+        auto* target_pos = std::uninitialized_move(data<D>(), p, target.template data<direction::indirect>());
+
+        // move everything [pos, end]
+        std::uninitialized_move(p, data<D>() + s, target_pos + count);
+
+        target.template set_size<direction::indirect>(s + count);
+        *this = std::move(target);
+        return target_pos;
+    }
+
+    template <direction D>
+    [[nodiscard]] auto make_uninitialized_space(T const* pos, size_t count) -> T* {
         auto* const p = const_cast<T*>(pos); // NOLINT(cppcoreguidelines-pro-type-const-cast)
-        auto s = size();
-        if (s + count > capacity()) {
-            auto target = svector();
-            // we know target is indirect because we're increasing capacity
-            target.reserve(s + count);
-
-            // move everything [begin, pos[
-            auto* target_pos = std::uninitialized_move(begin(), p, target.template data<direction::indirect>());
-
-            // move everything [pos, end]
-            std::uninitialized_move(p, end(), target_pos + count);
-
-            target.template set_size<direction::indirect>(s + count);
-            *this = std::move(target);
-            return target_pos;
+        auto s = size<D>();
+        if (s + count > capacity<D>()) {
+            return make_uninitialized_space_new<D>(s, p, count);
         }
 
-        shift_right(p, end(), p + count);
-        set_size(s + count);
+        shift_right(p, data<D>() + s, p + count);
+        set_size<D>(s + count);
         return p;
+    }
+
+    // makes space for uninitialized data of cout elements. Also updates size.
+    [[nodiscard]] auto make_uninitialized_space(T const* pos, size_t count) -> T* {
+        if (is_direct()) {
+            return make_uninitialized_space<direction::direct>(pos, count);
+        }
+        return make_uninitialized_space<direction::indirect>(pos, count);
     }
 
     void destroy() {
@@ -576,16 +581,13 @@ public:
 
     [[nodiscard]] auto data() -> T* {
         if (is_direct()) {
-            return data<direction::direct>();
-        }
-        return data<direction::indirect>();
-    }
-
-    [[nodiscard]] auto data() const -> T const* {
-        if (is_direct()) {
             return direct_data();
         }
         return indirect()->data();
+    }
+
+    [[nodiscard]] auto data() const -> T const* {
+        return const_cast<svector*>(this)->data(); // NOLINT(cppcoreguidelines-pro-type-const-cast)
     }
 
     template <class... Args>

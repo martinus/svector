@@ -7,7 +7,8 @@ test_sources = [
     'bench/bench_emplace_back.cpp',
     'bench/bench_fill_front.cpp',
     'bench/bench_fill_random.cpp',
-    'bench/bench_push_pop.cpp',
+    'bench/bench_push_back.cpp',
+    'bench/bench_randomaccess.cpp',
     'bench/bench_sort_shuffle.cpp',
 
     'assign.cpp',
