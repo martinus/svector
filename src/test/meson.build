@@ -37,6 +37,7 @@ test_sources = [
     'shrink_to_fit.cpp',
     'std_erase.cpp',
     'swap.cpp',
+    'versions.cpp',
 ]
 
 # additional compile options

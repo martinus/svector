@@ -1,5 +1,42 @@
+// ┌─┐┬  ┬┌─┐┌─┐┌┬┐┌─┐┬─┐   Compact SVO optimized vector C++17 or higher
+// └─┐└┐┌┘├┤ │   │ │ │├┬┘   Version 1.0.0
+// └─┘ └┘ └─┘└─┘ ┴ └─┘┴└─   https://github.com/martinus/svector
+//
+// Licensed under the MIT License <http://opensource.org/licenses/MIT>.
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2022 Martin Leitner-Ankerl <martin.ankerl@gmail.com>
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
 #ifndef ANKERL_SVECTOR_H
 #define ANKERL_SVECTOR_H
+
+// see https://semver.org/spec/v2.0.0.html
+#define ANKERL_SVECTOR_VERSION_MAJOR 1 // incompatible API changes
+#define ANKERL_SVECTOR_VERSION_MINOR 0 // add functionality in a backwards compatible manner
+#define ANKERL_SVECTOR_VERSION_PATCH 0 // backwards compatible bug fixes
+
+// API versioning with inline namespace, see https://www.foonathan.net/2018/11/inline-namespaces/
+#define ANKERL_SVECTOR_VERSION_CONCAT1(major, minor, patch) v##major##_##minor##_##patch
+#define ANKERL_SVECTOR_VERSION_CONCAT(major, minor, patch) ANKERL_SVECTOR_VERSION_CONCAT1(major, minor, patch)
+#define ANKERL_SVECTOR_NAMESPACE \
+    ANKERL_SVECTOR_VERSION_CONCAT(ANKERL_SVECTOR_VERSION_MAJOR, ANKERL_SVECTOR_VERSION_MINOR, ANKERL_SVECTOR_VERSION_PATCH)
 
 #include <algorithm>
 #include <array>
@@ -16,7 +53,7 @@
 #include <utility>
 
 namespace ankerl {
-
+inline namespace ANKERL_SVECTOR_NAMESPACE {
 namespace detail {
 
 template <typename Condition, typename T = void>
@@ -876,10 +913,12 @@ template <typename T, size_t NA, size_t NB>
     return !(a > b);
 }
 
+} // namespace ANKERL_SVECTOR_NAMESPACE
 } // namespace ankerl
 
 // NOLINTNEXTLINE(cert-dcl58-cpp)
 namespace std {
+inline namespace ANKERL_SVECTOR_NAMESPACE {
 
 template <class T, size_t N, class U>
 constexpr auto erase(ankerl::svector<T, N>& sv, U const& value) -> typename ankerl::svector<T, N>::size_type {
@@ -897,6 +936,7 @@ constexpr auto erase_if(ankerl::svector<T, N>& sv, Pred pred) -> typename ankerl
     return num_removed;
 }
 
+} // namespace ANKERL_SVECTOR_NAMESPACE
 } // namespace std
 
 #endif
