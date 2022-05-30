@@ -34,7 +34,7 @@ In **indirect mode**, the first 8 byte (4 byte for 32bit) hold a pointer to an a
 ## Benchmarks
 
 To my surprise, the performance of the `ankerl::svector` is actually quite good. I wrote benchmarks to compare it against 
-`boost::container::small_vector`, `absl::InlinedVector` and of course `std::vector`. In all benchmarks I'm using [nanobench](https://github.com/martinus/nanobench). All compiled with clang++ 13.0.1 with `-std=c++17 -O3`, and run on a frequency-locked Intel i7-8700 @ 3.2GHz.
+`boost::container::small_vector`, `absl::InlinedVector` and of course `std::vector`. In all benchmarks I'm using [nanobench](https://github.com/martinus/nanobench). All compiled with clang++ 13.0.1 with `-std=c++17 -O3`, and run on an Intel i7-8700 that is frequency locked to 3.2GHz.
 
 ### push_back
 
