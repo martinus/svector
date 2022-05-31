@@ -6,6 +6,8 @@
 #include <doctest.h>
 #include <fmt/format.h>
 
+#include <vector>
+
 template <typename T>
 void show(char const* what) {
     fmt::print("{} sizeof({})\n", sizeof(T), what);

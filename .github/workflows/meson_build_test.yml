@@ -1,0 +1,44 @@
+name: Build and Test with Meson
+
+on: push
+
+# see https://github.com/mesonbuild/meson/blob/master/docs/markdown/Continuous-Integration.md
+jobs:
+
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v1
+    - name: install dependencies boost
+      run: sudo apt-get install -yq libboost-dev
+    - uses: hendrikmuhs/ccache-action@v1.2
+    - uses: actions/setup-python@v1
+      with:
+        python-version: '3.x'
+    - run: pip install meson ninja
+    - run: meson setup builddir/
+      env:
+        CXX: ccache c++
+    - run: meson test -C builddir/ -v
+    - uses: actions/upload-artifact@v1
+      if: failure()
+      with:
+        name: Linux_Meson_Testlog
+        path: builddir/meson-logs/testlog.txt
+  macos:
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v1
+    - uses: actions/setup-python@v1
+      with:
+        python-version: '3.x'
+    - run: brew install gcc boost ccache meson ninja
+    - run: meson setup builddir/
+      env:
+        CXX: ccache c++
+    - run: meson test -C builddir/ -v
+    - uses: actions/upload-artifact@v1
+      if: failure()
+      with:
+        name: MacOS_Meson_Testlog
+        path: builddir/meson-logs/testlog.txt        
