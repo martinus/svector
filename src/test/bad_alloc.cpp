@@ -1,6 +1,13 @@
 #include <ankerl/svector.h>
 
-#include <valgrind/valgrind.h>
+// make sure all this works even when valgrind is not installed
+#if __has_include(<valgrind/valgrind.h>)
+#    include <valgrind/valgrind.h>
+#else
+#    ifndef RUNNING_ON_VALGRIND
+#        define RUNNING_ON_VALGRIND 0
+#    endif
+#endif
 
 #include <doctest.h>
 

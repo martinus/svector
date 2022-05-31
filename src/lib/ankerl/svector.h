@@ -164,7 +164,7 @@ struct storage : public header {
             throw std::bad_alloc();
         }
         mem += offset_to_data;
-        if (mem > std::numeric_limits<std::ptrdiff_t>::max()) {
+        if (static_cast<uint64_t>(mem) > static_cast<uint64_t>(std::numeric_limits<std::ptrdiff_t>::max())) {
             throw std::bad_alloc();
         }
 

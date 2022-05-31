@@ -3,6 +3,8 @@
 
 #include <doctest.h>
 
+#include <vector>
+
 template <typename V>
 void test_swap() {
     Counter counts;
