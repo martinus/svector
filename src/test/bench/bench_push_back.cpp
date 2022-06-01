@@ -1,8 +1,8 @@
 #include <ankerl/svector.h>
 #include <app/name_of_type.h>
+#include <app/nanobench.h>
 
 #include <doctest.h>
-#include <nanobench.h>
 
 #include <absl/container/inlined_vector.h>
 #include <boost/container/small_vector.hpp>
