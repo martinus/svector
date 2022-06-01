@@ -1,5 +1,9 @@
 <a id="top"></a>
 
+[![meson_build_test](https://github.com/martinus/svector/actions/workflows/main.yml/badge.svg)](https://github.com/martinus/svector/actions)
+[![GitHub license](https://img.shields.io/badge/license-MIT-blue.svg)](https://raw.githubusercontent.com/martinus/svector/main/LICENSE)
+[![CII Best Practices](https://bestpractices.coreinfrastructure.org/projects/6091/badge)](https://bestpractices.coreinfrastructure.org/projects/6091)
+
 # ankerl::svector 🚚
 
 `ankerl::svector` is an `std::vector`-like container that can hold some elements on the stack without the need for any allocation.
