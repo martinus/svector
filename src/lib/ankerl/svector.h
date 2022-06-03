@@ -633,7 +633,14 @@ public:
     }
 
     void resize(size_t count) {
-        resize(count, T());
+        if (count > capacity()) {
+            reserve(count);
+        }
+        if (is_direct()) {
+            resize_after_reserve<direction::direct>(count);
+        } else {
+            resize_after_reserve<direction::indirect>(count);
+        }
     }
 
     void resize(size_t count, T const& value) {
