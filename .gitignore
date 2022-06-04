@@ -1,4 +1,5 @@
 build
+builddir
 
 # ignore all in subprojects except the .wrap files
 /subprojects/*
