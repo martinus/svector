@@ -11,19 +11,26 @@ import re
 
 root_path = path.abspath(Path(__file__).parent.parent.parent)
 
-extensions = ["h", "cpp"]
+globs = [
+    f"{root_path}/include/**/*.h",
+    f"{root_path}/test/**/*.h",
+    f"{root_path}/test/**/*.cpp",
+]
 exclusions = ["nanobench\.h"]
 
 files = []
-for ext in extensions:
-    g = glob(f"{root_path}/src/**/*.{ext}", recursive=True)
-    files.extend(g)
+for g in globs:
+    r = glob(g, recursive=True)
+    files.extend(r)
 
 # filter out exclusions
 for exclusion in exclusions:
     l = filter(lambda file: re.search(exclusion, file) == None, files)
     files = list(l)
 
+if len(files) == 0:
+    print("could not find any files!")
+    sys.exit(1)
 
 command = ['clang-format', '--dry-run', '-Werror'] + files
 p = subprocess.Popen(command,
@@ -33,7 +40,8 @@ p = subprocess.Popen(command,
                      universal_newlines=True)
 
 stdout, stderr = p.communicate()
-if p.returncode != 0:
-    sys.exit(p.returncode)
 
 print(f"clang-format checked {len(files)} files")
+
+if p.returncode != 0:
+    sys.exit(p.returncode)

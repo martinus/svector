@@ -22,6 +22,6 @@ project('svector', 'cpp',
     license: 'MIT',
     default_options : ['cpp_std=c++17', 'warning_level=3', 'werror=true'])
 
-subdir('include')
+incdir = include_directories('include')
 subdir('test')
 

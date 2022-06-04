@@ -57,7 +57,7 @@ endif
 test_exe = executable(
     'test-svector',
     test_sources,
-    include_directories: lib_inc,
+    include_directories: incdir,
     cpp_args: cpp_args,
     dependencies: [
         dependency('threads'), # add dependency for threads (-lpthread, see https://mesonbuild.com/howtox.html),
