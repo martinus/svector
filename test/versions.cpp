@@ -53,12 +53,12 @@ void check(std::filesystem::path const& filename,
 } // namespace
 
 TEST_CASE("versions") {
-    auto const root = std::filesystem::path(__FILE__).parent_path().parent_path().parent_path();
+    auto const root = std::filesystem::path(__FILE__).parent_path().parent_path();
 
     auto major_minor_patch = std::vector{std::to_string(ANKERL_SVECTOR_VERSION_MAJOR),
                                          std::to_string(ANKERL_SVECTOR_VERSION_MINOR),
                                          std::to_string(ANKERL_SVECTOR_VERSION_PATCH)};
 
     check(root / "meson.build", R"(version: '(\d+)\.(\d+)\.(\d+)')", major_minor_patch, 1);
-    check(root / "src/lib/ankerl/svector.h", R"(Version (\d+)\.(\d+)\.(\d+)\n)", major_minor_patch, 1);
+    check(root / "include/ankerl/svector.h", R"(Version (\d+)\.(\d+)\.(\d+)\n)", major_minor_patch, 1);
 }

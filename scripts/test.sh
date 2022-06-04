@@ -4,6 +4,8 @@
 set -e
 cd `git rev-parse --show-toplevel`
 
+./scripts/lint/lint-all.py
+
 c=0
 for D in build/*/ ; do
     echo
