@@ -14,5 +14,9 @@ if(_svector_is_included)
     add_library(svector INTERFACE)
     add_library(svector::svector ALIAS svector)
     target_compile_features(svector INTERFACE cxx_std_17)
-    target_include_directories(svector PUBLIC ${PROJECT_SOURCE_DIR}/include)
+    target_include_directories(
+        svector
+        INTERFACE
+            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+            $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 endif()
