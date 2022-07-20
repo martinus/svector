@@ -6,8 +6,6 @@ import subprocess
 
 
 cmd_and_dir = [
-    ['env', 'CXX=ccache g++',     'meson', 'setup', '-Db_sanitize=address',   'builddir/gcc_sanitize_address'],
-
     ['env', 'CXX=ccache clang++', 'meson', 'setup', '--buildtype', 'release', '-Dcpp_std=c++17', 'builddir/clang_cpp17_release'],
     ['env', 'CXX=ccache clang++', 'meson', 'setup', '--buildtype', 'debug',   '-Dcpp_std=c++17', 'builddir/clang_cpp17_debug'],
     ['env', 'CXX=ccache g++',     'meson', 'setup', '--buildtype', 'release', '-Dcpp_std=c++17', 'builddir/gcc_cpp17_release'],
