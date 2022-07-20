@@ -44,7 +44,7 @@ void api(uint8_t const* data, size_t size) {
 
                 new (&sv) Svector();
                 new (&ref) Ref();
-                assertEq(sv, ref);
+                // assertEq(sv, ref);
             },
             [&] {
                 std::destroy_at(&sv);
@@ -60,7 +60,7 @@ void api(uint8_t const* data, size_t size) {
                 for (auto& c : ref) {
                     c.set(counts);
                 }
-                assertEq(sv, ref);
+                // assertEq(sv, ref);
             },
             [&] {
                 auto tmp = Svector();
@@ -68,19 +68,13 @@ void api(uint8_t const* data, size_t size) {
                 auto tmp_ref = Ref();
                 ref = tmp_ref;
                 counts.check_all_done();
-                assertEq(sv, ref);
+                // assertEq(sv, ref);
             },
             [&] {
                 sv = Svector();
                 ref = Ref();
                 counts.check_all_done();
-                assertEq(sv, ref);
-            },
-            [&] {
-                auto count = p.bounded(10);
-                sv.assign(count, Counter::Obj(312, counts));
-                ref.assign(count, Counter::Obj(312, counts));
-                assertEq(sv, ref);
+                // assertEq(sv, ref);
             },
             [&] {
                 std::destroy_at(&sv);
@@ -90,12 +84,78 @@ void api(uint8_t const* data, size_t size) {
                 auto ary = std::array{Counter::Obj{1, counts}, Counter::Obj{2, counts}, Counter::Obj{3, counts}};
                 new (&sv) Svector(ary.begin(), ary.end());
                 new (&ref) Ref(ary.begin(), ary.end());
-                assertEq(sv, ref);
+                // assertEq(sv, ref);
+            },
+            [&] {
+                auto count = p.bounded(10);
+                sv.assign(count, Counter::Obj{1234, counts});
+                ref.assign(count, Counter::Obj{1234, counts});
+                // assertEq(sv, ref);
+            },
+            [&] {
+                auto count = p.bounded(10);
+                sv.assign(count, Counter::Obj(312, counts));
+                ref.assign(count, Counter::Obj(312, counts));
+                // assertEq(sv, ref);
+            },
+            [&] {
+                auto count = p.bounded(10);
+                sv.resize(count);
+                ref.resize(count);
+                for (auto& c : sv) {
+                    c.set(counts);
+                }
+                for (auto& c : ref) {
+                    c.set(counts);
+                }
+                // assertEq(sv, ref);
+            },
+            [&] {
+                auto count = p.bounded(10);
+                sv.resize(count, Counter::Obj{555, counts});
+                ref.resize(count, Counter::Obj{555, counts});
+                // assertEq(sv, ref);
+            },
+            [&] {
+                auto count = p.bounded(10);
+                sv.reserve(count);
+                ref.reserve(count);
+                // assertEq(sv, ref);
             },
             [&] {
                 sv.emplace_back(val, counts);
                 ref.emplace_back(val, counts);
-                assertEq(sv, ref);
+                ++val;
+                // assertEq(sv, ref);
+            },
+            [&] {
+                auto it = sv.rbegin();
+                auto it_ref = ref.rbegin();
+                while (it != sv.rend()) {
+                    REQUIRE(*it == *it_ref);
+                    ++it;
+                    ++it_ref;
+                }
+            },
+            [&] {
+                if (!sv.empty()) {
+                    REQUIRE(sv.front() == ref.front());
+                    REQUIRE(sv.back() == ref.back());
+                }
+            },
+            [&] {
+                REQUIRE(sv.empty() == ref.empty());
+                sv.clear();
+                ref.clear();
+                REQUIRE(sv.empty() == ref.empty());
+                counts.check_all_done();
+                // assertEq(sv, ref);
+            },
+            [&] {
+                if (!sv.empty()) {
+                    auto pos = p.bounded(sv.size());
+                    REQUIRE(sv[pos] == ref[pos]);
+                }
             },
             [&] {
                 if (!sv.empty()) {
@@ -103,16 +163,64 @@ void api(uint8_t const* data, size_t size) {
                     auto it_idx = sv.erase(sv.begin() + idx);
                     auto it_ref = ref.erase(ref.begin() + idx);
                     REQUIRE(std::distance(it_idx, sv.end()) == std::distance(it_ref, ref.end()));
-                    assertEq(sv, ref);
+                    // assertEq(sv, ref);
                 }
             },
             [&] {
                 if (!sv.empty()) {
                     sv.pop_back();
                     ref.pop_back();
-                    assertEq(sv, ref);
+                    // assertEq(sv, ref);
+                }
+            },
+            [&] {
+                sv.shrink_to_fit();
+                ref.shrink_to_fit();
+                // assertEq(sv, ref);
+            },
+            [&] {
+                auto pos = p.bounded(sv.size());
+                sv.insert(sv.cbegin() + pos, Counter::Obj{987, counts});
+                ref.insert(ref.cbegin() + pos, Counter::Obj{987, counts});
+                // assertEq(sv, ref);
+            },
+            [&] {
+                auto pos = p.bounded(sv.size());
+                auto count = p.bounded(10);
+                sv.insert(sv.cbegin() + pos, count, Counter::Obj{987, counts});
+                ref.insert(ref.cbegin() + pos, count, Counter::Obj{987, counts});
+                // assertEq(sv, ref);
+            },
+            [&] {
+                auto pos = p.bounded(sv.size());
+                auto ary = std::array{Counter::Obj{17, counts}, Counter::Obj{27, counts}, Counter::Obj{37, counts}};
+                sv.insert(sv.cbegin() + pos, ary.begin(), ary.end());
+                ref.insert(ref.cbegin() + pos, ary.begin(), ary.end());
+                // assertEq(sv, ref);
+            },
+            [&] {
+                if (!sv.empty()) {
+                    auto pos = p.bounded(sv.size());
+                    auto it = sv.erase(sv.begin() + pos);
+                    auto it_ref = ref.erase(ref.begin() + pos);
+                    REQUIRE(std::distance(it, sv.end()) == std::distance(it_ref, ref.end()));
+                    // assertEq(sv, ref);
+                }
+            },
+            [&] {
+                if (!sv.empty()) {
+                    auto pos1 = p.bounded(sv.size());
+                    auto pos2 = p.bounded(sv.size());
+                    if (pos1 > pos2) {
+                        std::swap(pos1, pos2);
+                    }
+                    auto it = sv.erase(sv.begin() + pos1, sv.begin() + pos2);
+                    auto it_ref = ref.erase(ref.begin() + pos1, ref.begin() + pos2);
+                    REQUIRE(std::distance(it, sv.end()) == std::distance(it_ref, ref.end()));
+                    // assertEq(sv, ref);
                 }
             });
+
         assertEq(sv, ref);
     }
 }
