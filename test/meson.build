@@ -2,7 +2,8 @@ test_sources = [
     'app/Counter.cpp',
     'app/doctest.cpp',
     'app/nanobench.cpp',
-
+    'app/ui/Periodic.cpp',
+    'app/ui/ProgressBar.cpp',
     'bench/bench_accumulate.cpp',
     'bench/bench_emplace_back.cpp',
     'bench/bench_fill_front.cpp',
@@ -10,33 +11,34 @@ test_sources = [
     'bench/bench_push_back.cpp',
     'bench/bench_randomaccess.cpp',
     'bench/bench_sort_shuffle.cpp',
-
-    'alignment.cpp',
-    'assign.cpp',
-    'assignment_operators.cpp',
-    'at.cpp',
-    'automatic_capacity.cpp',
-    'bad_alloc.cpp',
-    'basic_api.cpp',
-    'comparisons.cpp',
-    'ctors.cpp',
-    'emplace_back.cpp',
-    'emplace.cpp',
-    'erase.cpp',
-    'includes_only.cpp',
-    'insert.cpp',
-    'member_types.cpp',
-    'n_eq_0.cpp',
-    'pop_back.cpp',
-    'push_back.cpp',
-    'reserve.cpp',
-    'resize.cpp',
-    'reverse_iterators.cpp',
-    'round_up.cpp',
-    'show_comparison.cpp',
-    'shrink_to_fit.cpp',
-    'std_erase.cpp',
-    'swap.cpp',
+    'fuzz/api.cpp',
+    'unit/alignment.cpp',
+    'unit/assign.cpp',
+    'unit/assignment_operators.cpp',
+    'unit/at.cpp',
+    'unit/automatic_capacity.cpp',
+    'unit/bad_alloc.cpp',
+    'unit/basic_api.cpp',
+    'unit/comparisons.cpp',
+    'unit/ctors.cpp',
+    'unit/emplace_back.cpp',
+    'unit/emplace.cpp',
+    'unit/erase.cpp',
+    'unit/fuzz_corpus.cpp',
+    'unit/includes_only.cpp',
+    'unit/insert.cpp',
+    'unit/member_types.cpp',
+    'unit/n_eq_0.cpp',
+    'unit/pop_back.cpp',
+    'unit/push_back.cpp',
+    'unit/reserve.cpp',
+    'unit/resize.cpp',
+    'unit/reverse_iterators.cpp',
+    'unit/round_up.cpp',
+    'unit/show_comparison.cpp',
+    'unit/shrink_to_fit.cpp',
+    'unit/std_erase.cpp',
+    'unit/swap.cpp',
 ]
 
 # additional compile options
@@ -80,3 +82,39 @@ test(
     test_exe,
     verbose: true)
 
+test(
+    'fuzz',
+    test_exe,
+    args: ['-ns', '-ts=fuzz'],
+    env: 'FUZZ_CORPUS_BASE_DIR=' + meson.source_root() / 'data' / 'fuzz',
+    verbose: true)
+
+
+
+if compiler.get_id() == 'clang'
+    fuzz_deps = [
+            dependency('doctest'),
+            dependency('threads'),
+            dependency('fmt', method: fmt_method),
+        ]
+    fuzz_cpp_args = [
+        '-DFUZZ',
+        '-fsanitize-undefined-trap-on-error',
+        '-fsanitize=undefined,address,fuzzer',
+        '-g',
+        '-isystem', '/usr/lib64/clang/14.0.0/include/',
+    ]
+    fuzz_link_args = ['-fsanitize=undefined,address,fuzzer']
+    fuzz_sources = [
+        'app/Counter.cpp',
+    ]
+
+    executable(
+        'fuzz_api',
+        fuzz_sources + ['fuzz/api.cpp'],
+        include_directories: incdir,
+        cpp_args : fuzz_cpp_args,
+        link_args: fuzz_link_args,
+        dependencies: fuzz_deps,
+    )
+endif

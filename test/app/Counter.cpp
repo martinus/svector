@@ -91,6 +91,10 @@ Counter::Obj::~Obj() {
     }
 }
 
+void Counter::Obj::set(Counter& c) {
+    mCounts = &c;
+}
+
 auto Counter::Obj::operator==(const Counter::Obj& o) const -> bool {
 #if COUNTER_ENABLE_UNORDERED_SET
     if (1 != singletonConstructedObjects().count(this) || 1 != singletonConstructedObjects().count(&o)) {
@@ -128,6 +132,8 @@ auto Counter::Obj::operator=(const Counter::Obj& o) -> Counter::Obj& {
     mCounts = o.mCounts;
     if (nullptr != mCounts) {
         ++mCounts->assign;
+    } else {
+        ++staticCopyCtor;
     }
     mData = o.mData;
     return *this;
@@ -146,6 +152,8 @@ auto Counter::Obj::operator=(Counter::Obj&& o) noexcept -> Counter::Obj& {
     mData = o.mData;
     if (nullptr != mCounts) {
         ++mCounts->moveAssign;
+    } else {
+        ++staticMoveCtor;
     }
     return *this;
 }
@@ -188,6 +196,8 @@ auto Counter::Obj::getForHash() const -> size_t {
 
 Counter::Counter() {
     Counter::staticDefaultCtor = 0;
+    Counter::staticCopyCtor = 0;
+    Counter::staticMoveCtor = 0;
     Counter::staticDtor = 0;
 }
 
@@ -198,16 +208,20 @@ void Counter::check_all_done() const {
         test::print("ERROR at ~Counter(): got {} objects still alive!", singletonConstructedObjects().size());
         std::abort();
     }
-    if (dtor + staticDtor != ctor + staticDefaultCtor + copyCtor + defaultCtor + moveCtor) {
+    if (dtor + staticDtor !=
+        (ctor + staticDefaultCtor) + (copyCtor + staticCopyCtor) + defaultCtor + (moveCtor + staticMoveCtor)) {
         test::print("ERROR at ~Counter(): number of counts does not match!\n");
-        test::print("{} dtor + {} staticDtor != {} ctor + {} staticDefaultCtor + {} copyCtor + {} defaultCtor + {} moveCtor\n",
-                    dtor,
-                    staticDtor,
-                    ctor,
-                    staticDefaultCtor,
-                    copyCtor,
-                    defaultCtor,
-                    moveCtor);
+        test::print(
+            "{} dtor + {} staticDtor != ({} ctor + {} staticDefaultCtor) + ({} copyCtor + {} staticCopyCtor) + {} defaultCtor + ({} moveCtor + {} staticMoveCtor)\n",
+            dtor,
+            staticDtor,
+            ctor,
+            staticDefaultCtor,
+            copyCtor,
+            staticCopyCtor,
+            defaultCtor,
+            moveCtor,
+            staticMoveCtor);
         std::abort();
     }
 #endif
@@ -218,8 +232,8 @@ Counter::~Counter() {
 }
 
 auto Counter::total() const -> size_t {
-    return ctor + staticDefaultCtor + copyCtor + (dtor + staticDtor) + equals + less + assign + swaps + get + constGet + hash +
-           moveCtor + moveAssign;
+    return (ctor + staticDefaultCtor) + copyCtor + (dtor + staticDtor) + equals + less + assign + swaps + get + constGet +
+           hash + moveCtor + moveAssign;
 }
 
 void Counter::operator()(std::string_view title) {
@@ -249,4 +263,6 @@ auto operator new(size_t /*unused*/, Counter::Obj* /*unused*/) -> void* {
     throw std::runtime_error("operator new overload is taken! Cast to void* to ensure the void pointer overload is taken.");
 }
 size_t Counter::staticDefaultCtor = 0; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
+size_t Counter::staticCopyCtor = 0;    // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
+size_t Counter::staticMoveCtor = 0;    // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 size_t Counter::staticDtor = 0;        // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)

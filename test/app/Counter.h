@@ -31,6 +31,9 @@ struct Counter {
         void swap(Obj& other);
         [[nodiscard]] auto getForHash() const -> size_t;
 
+        // helper to set counter when not yet set
+        void set(Counter& counter);
+
     private:
         size_t mData;
         Counter* mCounts;
@@ -63,6 +66,8 @@ struct Counter {
     [[nodiscard]] auto total() const -> size_t;
 
     static size_t staticDefaultCtor; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
+    static size_t staticCopyCtor;    // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
+    static size_t staticMoveCtor;    // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
     static size_t staticDtor;        // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 };
 
