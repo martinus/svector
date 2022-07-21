@@ -1,6 +1,7 @@
 build
 builddir
 .env
+.vscode
 
 # ignore all in subprojects except the .wrap files
 /subprojects/*
