@@ -25,12 +25,12 @@
 #endif
 
 TEST_CASE("reserve_bad_alloc") {
-    if (RUNNING_ON_VALGRIND || SANITIZER_ACTIVE) {
+    if constexpr (RUNNING_ON_VALGRIND || SANITIZER_ACTIVE) {
         // this test doesn't work with valgrind or some sanitizers.
-        return;
+    } else {
+        auto sv = ankerl::svector<std::string, 3>();
+        auto m = sv.max_size();
+        REQUIRE(m == std::numeric_limits<std::ptrdiff_t>::max());
+        REQUIRE_THROWS_AS(sv.reserve(sv.max_size()), std::bad_alloc);
     }
-    auto sv = ankerl::svector<std::string, 3>();
-    auto m = sv.max_size();
-    REQUIRE(m == std::numeric_limits<std::ptrdiff_t>::max());
-    REQUIRE_THROWS_AS(sv.reserve(sv.max_size()), std::bad_alloc);
 }

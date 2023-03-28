@@ -1,11 +1,10 @@
 #include <ankerl/svector.h>
+#include <app/boost_absl.h>
 #include <app/name_of_type.h>
 #include <app/nanobench.h>
 
 #include <doctest.h>
 
-#include <absl/container/inlined_vector.h>
-#include <boost/container/small_vector.hpp>
 #include <fmt/format.h>
 
 #include <fstream>
@@ -32,8 +31,12 @@ TEST_CASE("bench_fill_front_int" * doctest::skip() * doctest::test_suite("bench"
     bench.title("emplace(vec.begin(), ...)");
 
     fill_front<std::vector<int>>(bench, num_items);
+#if ANKERL_SVECTOR_HAS_ABSL()
     fill_front<absl::InlinedVector<int, 7>>(bench, num_items);
+#endif
+#if ANKERL_SVECTOR_HAS_BOOST()
     fill_front<boost::container::small_vector<int, 7>>(bench, num_items);
+#endif
     fill_front<ankerl::svector<int, 7>>(bench, num_items);
 
     auto f = std::ofstream("bench_fill_front_int.html");
@@ -47,8 +50,12 @@ TEST_CASE("bench_fill_front_string" * doctest::skip() * doctest::test_suite("ben
 
     fill_front<std::vector<std::string>>(bench, num_items, "hello");
     fill_front<ankerl::svector<std::string, 7>>(bench, num_items, "hello");
+#if ANKERL_SVECTOR_HAS_ABSL()
     fill_front<absl::InlinedVector<std::string, 7>>(bench, num_items, "hello");
+#endif
+#if ANKERL_SVECTOR_HAS_BOOST()
     fill_front<boost::container::small_vector<std::string, 7>>(bench, num_items, "hello");
+#endif
 
     auto f = std::ofstream("bench_fill_front_string.html");
     bench.render(ankerl::nanobench::templates::htmlBoxplot(), f);

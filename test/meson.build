@@ -55,6 +55,9 @@ if get_option('cpp_args').contains('-m32')
     fmt_method = 'builtin'
 endif
 
+opt_boost = dependency('boost', required: false)
+opt_absl = dependency('absl_container', default_options: ['warning_level=0', 'werror=false'], required: false)
+
 test_exe = executable(
     'test-svector',
     test_sources,
@@ -64,8 +67,8 @@ test_exe = executable(
         dependency('threads'), # add dependency for threads (-lpthread, see https://mesonbuild.com/howtox.html),
 
         # see what's in the [provide] sections for the dependency names
-        dependency('absl_container', default_options: ['warning_level=0', 'werror=false']), # just for comparison with inline_vector
-        dependency('boost'),
+        opt_absl,
+        opt_boost,
         dependency('doctest'),
         dependency('fmt', method: fmt_method),
     ],

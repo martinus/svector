@@ -1,11 +1,10 @@
 #include <ankerl/svector.h>
+#include <app/boost_absl.h>
 #include <app/name_of_type.h>
 #include <app/nanobench.h>
 
 #include <doctest.h>
 
-#include <absl/container/inlined_vector.h>
-#include <boost/container/small_vector.hpp>
 #include <fmt/format.h>
 
 #include <fstream>
@@ -31,8 +30,12 @@ TEST_CASE("bench_emplace_back_int" * doctest::skip() * doctest::test_suite("benc
     bench.epochs(100);
 
     emplace_back<std::vector<int>>(bench, num_items);
+#if ANKERL_SVECTOR_HAS_ABSL()
     emplace_back<absl::InlinedVector<int, 4>>(bench, num_items);
+#endif
+#if ANKERL_SVECTOR_HAS_BOOST()
     emplace_back<boost::container::small_vector<int, 4>>(bench, num_items);
+#endif
     emplace_back<ankerl::svector<int, 4>>(bench, num_items);
 
     auto f = std::ofstream("bench_emplace_back_int.html");
@@ -46,8 +49,12 @@ TEST_CASE("bench_emplace_back_string" * doctest::skip() * doctest::test_suite("b
     bench.epochs(100);
 
     emplace_back<std::vector<std::string>>(bench, num_items, "hello");
+#if ANKERL_SVECTOR_HAS_ABSL()
     emplace_back<absl::InlinedVector<std::string, 7>>(bench, num_items, "hello");
+#endif
+#if ANKERL_SVECTOR_HAS_BOOST()
     emplace_back<boost::container::small_vector<std::string, 7>>(bench, num_items, "hello");
+#endif
     emplace_back<ankerl::svector<std::string, 7>>(bench, num_items, "hello");
 
     auto f = std::ofstream("bench_emplace_back_string.html");

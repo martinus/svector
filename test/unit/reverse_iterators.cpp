@@ -2,6 +2,7 @@
 
 #include <doctest.h>
 
+#include <ostream>
 #include <string_view>
 
 using namespace std::literals;

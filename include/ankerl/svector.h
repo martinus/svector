@@ -1,10 +1,10 @@
 // ┌─┐┬  ┬┌─┐┌─┐┌┬┐┌─┐┬─┐   Compact SVO optimized vector C++17 or higher
-// └─┐└┐┌┘├┤ │   │ │ │├┬┘   Version 1.0.2
+// └─┐└┐┌┘├┤ │   │ │ │├┬┘   Version 1.0.3
 // └─┘ └┘ └─┘└─┘ ┴ └─┘┴└─   https://github.com/martinus/svector
 //
 // Licensed under the MIT License <http://opensource.org/licenses/MIT>.
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2022 Martin Leitner-Ankerl <martin.ankerl@gmail.com>
+// Copyright (c) 2022-2023 Martin Leitner-Ankerl <martin.ankerl@gmail.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -30,7 +30,7 @@
 // see https://semver.org/spec/v2.0.0.html
 #define ANKERL_SVECTOR_VERSION_MAJOR 1 // incompatible API changes
 #define ANKERL_SVECTOR_VERSION_MINOR 0 // add functionality in a backwards compatible manner
-#define ANKERL_SVECTOR_VERSION_PATCH 2 // backwards compatible bug fixes
+#define ANKERL_SVECTOR_VERSION_PATCH 3 // backwards compatible bug fixes
 
 // API versioning with inline namespace, see https://www.foonathan.net/2018/11/inline-namespaces/
 #define ANKERL_SVECTOR_VERSION_CONCAT1(major, minor, patch) v##major##_##minor##_##patch
@@ -211,7 +211,7 @@ class svector {
 
     // sets size of direct mode and mode to direct too.
     constexpr void set_direct_and_size(size_t s) {
-        m_data[0] = (s << 1U) | 1U;
+        m_data[0] = static_cast<uint8_t>((s << 1U) | 1U);
     }
 
     [[nodiscard]] auto direct_data() -> T* {
@@ -285,9 +285,9 @@ class svector {
                 // indirect -> indirect
                 uninitialized_move_and_destroy(data<direction::indirect>(), storage->data(), size<direction::indirect>());
                 storage->size(size<direction::indirect>());
-                auto* storage = indirect();
-                std::destroy_at(storage);
-                ::operator delete(storage);
+                auto* storage_direct = indirect();
+                std::destroy_at(storage_direct);
+                ::operator delete(storage_direct);
             }
             set_indirect(storage);
         }

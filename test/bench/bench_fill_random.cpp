@@ -1,11 +1,10 @@
 #include <ankerl/svector.h>
+#include <app/boost_absl.h>
 #include <app/name_of_type.h>
 #include <app/nanobench.h>
 
 #include <doctest.h>
 
-#include <absl/container/inlined_vector.h>
-#include <boost/container/small_vector.hpp>
 #include <fmt/format.h>
 
 #include <fstream>
@@ -18,7 +17,7 @@ void fill_random(ankerl::nanobench::Bench& bench, size_t num_items) {
         auto rng = ankerl::nanobench::Rng(1234);
         auto vec = Vec();
         for (size_t i = 0; i < num_items; ++i) {
-            auto it = vec.begin() + rng.bounded(vec.size());
+            auto it = vec.begin() + rng.bounded(static_cast<uint32_t>(vec.size()));
             if constexpr (std::is_same_v<typename Vec::value_type, std::string>) {
                 vec.emplace(it, "hello");
             } else {
@@ -36,8 +35,12 @@ TEST_CASE("bench_fill_random_uint64_t" * doctest::skip() * doctest::test_suite("
     bench.epochs(100);
 
     fill_random<std::vector<uint64_t>>(bench, num_items);
+#if ANKERL_SVECTOR_HAS_ABSL()
     fill_random<absl::InlinedVector<uint64_t, 7>>(bench, num_items);
+#endif
+#if ANKERL_SVECTOR_HAS_BOOST()
     fill_random<boost::container::small_vector<uint64_t, 7>>(bench, num_items);
+#endif
     fill_random<ankerl::svector<uint64_t, 7>>(bench, num_items);
 
     auto f = std::ofstream("bench_fill_random_uint64_t.html");
@@ -51,8 +54,13 @@ TEST_CASE("bench_fill_random_string" * doctest::skip() * doctest::test_suite("be
     bench.epochs(100);
 
     fill_random<std::vector<std::string>>(bench, num_items);
+#if ANKERL_SVECTOR_HAS_ABSL()
     fill_random<absl::InlinedVector<std::string, 7>>(bench, num_items);
+#endif
+#if ANKERL_SVECTOR_HAS_BOOST()
     fill_random<boost::container::small_vector<std::string, 7>>(bench, num_items);
+
+#endif
     fill_random<ankerl::svector<std::string, 7>>(bench, num_items);
 
     auto f = std::ofstream("bench_fill_random_string.html");
