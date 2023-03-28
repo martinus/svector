@@ -1,11 +1,10 @@
 #include <ankerl/svector.h>
+#include <app/boost_absl.h>
 #include <app/name_of_type.h>
 #include <app/nanobench.h>
 
 #include <doctest.h>
 
-#include <absl/container/inlined_vector.h>
-#include <boost/container/small_vector.hpp>
 #include <fmt/format.h>
 
 #include <fstream>
@@ -35,8 +34,12 @@ TEST_CASE("bench_accumulate_numeric" * doctest::skip() * doctest::test_suite("be
     bench.epochs(100);
 
     accumulate_numeric<std::vector<uint64_t>>(num_items, bench);
+#if ANKERL_SVECTOR_HAS_ABSL()
     accumulate_numeric<absl::InlinedVector<uint64_t, 7>>(num_items, bench);
+#endif
+#if ANKERL_SVECTOR_HAS_BOOST()
     accumulate_numeric<boost::container::small_vector<uint64_t, 7>>(num_items, bench);
+#endif
     accumulate_numeric<ankerl::svector<uint64_t, 7>>(num_items, bench);
 
     auto f = std::ofstream("bench_accumulate_numeric.html");

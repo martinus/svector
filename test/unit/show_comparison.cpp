@@ -1,7 +1,6 @@
 #include <ankerl/svector.h>
 
-#include <absl/container/inlined_vector.h>
-#include <boost/container/small_vector.hpp>
+#include <app/boost_absl.h>
 
 #include <doctest.h>
 #include <fmt/format.h>
@@ -21,7 +20,11 @@ TEST_CASE("show_sizeof" * doctest::skip()) {
     // static constexpr auto b = sizeof(boost::container::small_vector<uint8_t, 16>);
 
     show<std::vector<uint8_t>>("std::vector<uint8_t>");
-    show<boost::container::small_vector<std::byte, 15>>("boost::container::small_vector<std::byte, 15>");
+#if ANKERL_SVECTOR_HAS_ABSL()
     show<absl::InlinedVector<uint8_t, 56>>("absl::InlinedVector<uint8_t, 24>");
+#endif
+#if ANKERL_SVECTOR_HAS_BOOST()
+    show<boost::container::small_vector<std::byte, 15>>("boost::container::small_vector<std::byte, 15>");
+#endif
     show<ankerl::svector<uint8_t, 1>>("ankerl::svector<uint8_t, 1>");
 }

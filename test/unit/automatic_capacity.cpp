@@ -34,7 +34,7 @@ static_assert(ankerl::detail::automatic_capacity<uint8_t>(16) == 23);
 #endif
 
 TEST_CASE("automatic_capacity") {
-    if (INTPTR_MAX == INT32_MAX) {
+    if constexpr (INTPTR_MAX == INT32_MAX) {
         assert_size_capacity<ankerl::svector<uint8_t, 0>>(4, 3);
         assert_size_capacity<ankerl::svector<uint8_t, 1>>(4, 3);
         assert_size_capacity<ankerl::svector<uint8_t, 7>>(8, 7);
@@ -73,7 +73,7 @@ template <size_t S>
 using Foo = std::array<uint8_t, S>;
 
 TEST_CASE("automatic_capacity_15") {
-    if (INTPTR_MAX == INT32_MAX) {
+    if constexpr (INTPTR_MAX == INT32_MAX) {
         assert_size_capacity<ankerl::svector<Foo<15>, 0>>(4, 0);
         assert_size_capacity<ankerl::svector<Foo<15>, 1>>(16, 1);
         assert_size_capacity<ankerl::svector<Foo<15>, 2>>(32, 2);

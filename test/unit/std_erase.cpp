@@ -6,6 +6,7 @@
 #include <doctest.h>
 
 #include <numeric>
+#include <ostream>
 #include <stdexcept>
 #include <string_view>
 

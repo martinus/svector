@@ -2,6 +2,10 @@
 
 #include <doctest.h>
 
+#include <ostream>
+#include <string>
+#include <string_view>
+
 using namespace std::literals;
 
 TEST_CASE("assign_size_value") {

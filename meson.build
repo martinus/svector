@@ -18,9 +18,14 @@
 #
 
 project('svector', 'cpp',
-    version: '1.0.2',
+    version: '1.0.3',
     license: 'MIT',
-    default_options : ['cpp_std=c++17', 'warning_level=3', 'werror=true'])
+    default_options : [
+        'cpp_std=c++17',
+        'warning_level=3',
+        'werror=true',
+        'b_ndebug=true', # otherwise absl is really slow!
+    ])
 
 incdir = include_directories('include')
 subdir('test')

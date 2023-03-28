@@ -9,6 +9,7 @@
 #include <iostream>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 TEST_CASE("insert_single") {
     // extremely similar code to "emplace"
@@ -101,6 +102,9 @@ public:
     }
     friend auto operator!=(FooInputIterator const& a, FooInputIterator const& b) {
         return a.m_ptr != b.m_ptr;
+    }
+    friend auto operator==(FooInputIterator const& a, FooInputIterator const& b) {
+        return a.m_ptr == b.m_ptr;
     }
 };
 

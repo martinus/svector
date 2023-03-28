@@ -1,11 +1,10 @@
 #include <ankerl/svector.h>
+#include <app/boost_absl.h>
 #include <app/name_of_type.h>
 #include <app/nanobench.h>
 
 #include <doctest.h>
 
-#include <absl/container/inlined_vector.h>
-#include <boost/container/small_vector.hpp>
 #include <fmt/format.h>
 
 using namespace std::literals;
@@ -43,15 +42,23 @@ void sort_shuffle(size_t num_items) {
 TEST_CASE("bench_sort_shuffle_uint64_t" * doctest::skip() * doctest::test_suite("bench")) {
     auto num_items = 1000;
     sort_shuffle<std::vector<uint64_t>>(num_items);
+#if ANKERL_SVECTOR_HAS_ABSL()
     sort_shuffle<absl::InlinedVector<uint64_t, 7>>(num_items);
+#endif
+#if ANKERL_SVECTOR_HAS_BOOST()
     sort_shuffle<boost::container::small_vector<uint64_t, 7>>(num_items);
+#endif
     sort_shuffle<ankerl::svector<uint64_t, 7>>(num_items);
 }
 
 TEST_CASE("bench_sort_shuffle_string" * doctest::skip() * doctest::test_suite("bench")) {
     auto num_items = 1000;
     sort_shuffle<std::vector<std::string>>(num_items);
+#if ANKERL_SVECTOR_HAS_ABSL()
     sort_shuffle<absl::InlinedVector<std::string, 7>>(num_items);
+#endif
+#if ANKERL_SVECTOR_HAS_BOOST()
     sort_shuffle<boost::container::small_vector<std::string, 7>>(num_items);
+#endif
     sort_shuffle<ankerl::svector<std::string, 7>>(num_items);
 }
