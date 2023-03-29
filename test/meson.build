@@ -29,6 +29,7 @@ test_sources = [
     'unit/insert.cpp',
     'unit/member_types.cpp',
     'unit/n_eq_0.cpp',
+    'unit/non_movable.cpp',
     'unit/pop_back.cpp',
     'unit/push_back.cpp',
     'unit/reserve.cpp',
