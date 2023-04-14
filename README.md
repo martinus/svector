@@ -4,16 +4,15 @@
 [![GitHub license](https://img.shields.io/badge/license-MIT-blue.svg)](https://raw.githubusercontent.com/martinus/svector/main/LICENSE)
 [![CII Best Practices](https://bestpractices.coreinfrastructure.org/projects/6091/badge)](https://bestpractices.coreinfrastructure.org/projects/6091)
 
-# ankerl::svector 🚚
+# ankerl::svector 🚚 <!-- omit in toc -->
 
-- [ankerl::svector 🚚](#ankerlsvector-)
-  - [Design](#design)
-  - [Benchmarks](#benchmarks)
-    - [push\_back](#push_back)
-    - [Random Access](#random-access)
-    - [Random Insert](#random-insert)
-  - [Building \& Testing](#building--testing)
-  - [Disclaimer](#disclaimer)
+- [Design](#design)
+- [Benchmarks](#benchmarks)
+  - [push\_back](#push_back)
+  - [Random Access](#random-access)
+  - [Random Insert](#random-insert)
+- [Building \& Testing](#building--testing)
+- [Disclaimer](#disclaimer)
 
 `ankerl::svector` is an `std::vector`-like container that can hold some elements on the stack without the need for any allocation.
 There are lots of small vector implementations ([absl](https://github.com/abseil/abseil-cpp/blob/master/absl/container/inlined_vector.h), [boost](https://www.boost.org/doc/libs/1_79_0/doc/html/boost/container/small_vector.html), [folly](https://github.com/facebook/folly/blob/main/folly/docs/small_vector.md), [llvm](https://llvm.org/doxygen/classllvm_1_1SmallVector.html), ...) but this here is special by how compact it is.
