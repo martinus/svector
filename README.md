@@ -6,6 +6,15 @@
 
 # ankerl::svector 🚚
 
+- [ankerl::svector 🚚](#ankerlsvector-)
+  - [Design](#design)
+  - [Benchmarks](#benchmarks)
+    - [push\_back](#push_back)
+    - [Random Access](#random-access)
+    - [Random Insert](#random-insert)
+  - [Building \& Testing](#building--testing)
+  - [Disclaimer](#disclaimer)
+
 `ankerl::svector` is an `std::vector`-like container that can hold some elements on the stack without the need for any allocation.
 There are lots of small vector implementations ([absl](https://github.com/abseil/abseil-cpp/blob/master/absl/container/inlined_vector.h), [boost](https://www.boost.org/doc/libs/1_79_0/doc/html/boost/container/small_vector.html), [folly](https://github.com/facebook/folly/blob/main/folly/docs/small_vector.md), [llvm](https://llvm.org/doxygen/classllvm_1_1SmallVector.html), ...) but this here is special by how compact it is.
 
@@ -93,6 +102,20 @@ Note that I always recreate a seeded random generator so the loop is 100% determ
 ![benchmark random insert](doc/bench_random_insert.png)
 
 For some reason `absl::InlinedVector` is almost 5 times slower than `std::vector`. I double checked that I'm actually compiling absl with `-O3`, and that is the case. While `ankerl::svector` is slower than `std::vector` or `boost::container::small_vector`, it is still by only about 20%.
+
+## Building & Testing
+
+This project uses the [Meson](https://mesonbuild.com/) build system for building. the CMakeLists.txt file is added as a convenience and does not build or run the tests.
+
+How to configure & run the tests:
+
+Clone  `svector`, move to the root directory, and run
+
+```sh
+meson setup builddir
+cd builddir
+meson test
+```
 
 ## Disclaimer
 
