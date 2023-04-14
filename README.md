@@ -20,9 +20,9 @@ There are lots of small vector implementations ([absl](https://github.com/abseil
 
 ## How compact can it get?
 
-What's the minimum `sizeof(..)` of the different implementations, how much storage does it have, and what's the overhead?
+What's the minimum `sizeof(..)` of the different implementations, how much capacity does it have, and what's the overhead?
 
-|                                  |  sizeof | storage | overhead |
+|                                  |  sizeof | capacity | overhead |
 |----------------------------------|--------:|--------:|---------:|
 | `boost::container::small_vector` |    32   |     8   |     24   |
 | `absl::InlinedVector`            |    24   |    16   |      8   |
@@ -30,7 +30,7 @@ What's the minimum `sizeof(..)` of the different implementations, how much stora
 
 `ankerl::svector` can get as low as 8 bytes and still have space for 7 bytes on the stack. absl needs at least 24 bytes, and boost at least 32 bytes.
 
-The storage overhead of `ankerl::svector` is just a single byte. Boost needs a whopping 24 bytes, absl is a bit better with 8 bytes overhead.
+The overhead of `ankerl::svector` is just a single byte. Boost needs a whopping 24 bytes, absl is a bit better with 8 bytes overhead.
 
 Note that boost's `small_vector` cheats a bit. E.g. `boost::container::small_vector<std::byte, 15>` won't give you 15 elements on the stack, but only 8 bytes. It seems to round down to the closest multiple of 8 bytes.
 
