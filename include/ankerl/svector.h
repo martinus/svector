@@ -973,8 +973,8 @@ template <typename T, size_t NA, size_t NB>
 } // namespace ANKERL_SVECTOR_NAMESPACE
 } // namespace ankerl
 
-// NOLINTNEXTLINE(cert-dcl58-cpp)
 namespace std {
+// NOLINTNEXTLINE(cert-dcl58-cpp)
 inline namespace ANKERL_SVECTOR_NAMESPACE {
 
 template <class T, size_t N, class U>
