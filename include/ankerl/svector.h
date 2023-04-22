@@ -692,6 +692,23 @@ public:
     [[nodiscard]] auto data() const -> T const* {
         return const_cast<svector*>(this)->data(); // NOLINT(cppcoreguidelines-pro-type-const-cast)
     }
+    
+    // Danger: only use when you know size() < capacity() ahead of time
+    template <class... Args>
+    auto emplace_back_unchecked(Args&&... args) -> T& {
+        T* ptr; // NOLINT(cppcoreguidelines-init-variables)
+        size_t s; // NOLINT(cppcoreguidelines-init-variables)
+        if (is_dir) {
+            s = size<direction::direct>();
+            ptr = data<direction::direct>() + s;
+            set_size<direction::direct>(s + 1);
+        } else {
+            s = size<direction::indirect>();
+            ptr = data<direction::indirect>() + s;
+            set_size<direction::indirect>(s + 1);
+        }
+        return *new (static_cast<void*>(ptr)) T(std::forward<Args>(args)...);
+    }
 
     template <class... Args>
     auto emplace_back(Args&&... args) -> T& {
