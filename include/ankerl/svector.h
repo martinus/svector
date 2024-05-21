@@ -928,6 +928,59 @@ public:
         return insert(pos, l.begin(), l.end());
     }
 
+    template< class Operation >
+    constexpr void resize_and_overwrite(size_t count, Operation op) {
+        auto direct = is_direct();
+
+        auto   current_data = data<direction::direct>();
+        size_t current_size = size<direction::direct>();
+        size_t current_capacity = capacity<direction::direct>();
+
+        if (!direct) {
+            current_data = data<direction::indirect>();
+            current_size = size<direction::indirect>();
+            current_capacity = capacity<direction::indirect>();
+        }
+
+        auto new_data = current_data;
+
+        if (count <= current_size) {
+            // destroy the trailing elements?
+            std::destroy_n(new_data + count, current_size - count);
+        } else if (count > current_capacity) {
+            // put everything into indirect storage
+            auto new_capacity = calculate_new_capacity(count, current_capacity);
+            auto storage = detail::storage<T>::alloc(new_capacity);
+            // step 1: https://en.cppreference.com/w/cpp/string/basic_string/resize_and_overwrite
+            // count is strictly >= the current size, move the data over to the new allocation
+            uninitialized_move_and_destroy(current_data, storage->data(), current_size);
+
+            if (!direct) { // cleanup if the old storage was indirect
+                auto* storage_direct = indirect();
+                std::destroy_at(storage_direct);
+                ::operator delete(storage_direct);
+            }
+            // treat the newly allocated storage as part of this svector
+            set_indirect(storage);
+            new_data = storage->data();
+
+            // step 2 & 3: perform the target operation and reset the size
+            size_t new_size = op(new_data, current_size);
+            set_size<direction::indirect>(new_size);
+            return;
+        } else {
+            // should be ok to reuse the current data
+        }
+
+        // step 2 & 3: perform the target operation and reset the size
+        size_t new_size = op(new_data, current_size);
+        if (direct) {
+            set_size<direction::direct>(new_size);
+        } else {
+            set_size<direction::indirect>(new_size);
+        }
+    }
+
     auto erase(const_iterator pos) -> iterator {
         return erase(pos, pos + 1);
     }
