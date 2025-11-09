@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+	<Type Name="ankerl::v1_0_3::svector&lt;*&gt;">
+		<DisplayString>svector</DisplayString>
+		<Expand>
+			<!--<Synthetic Name="mode" Condition="(m_data[0] &amp; 1) == 1">
+				<DisplayString>direct mode</DisplayString>
+			</Synthetic>-->
+			<Item Name="size" Condition="(m_data[0] &amp; 1) == 1">m_data[0] &gt;&gt; 1</Item>
+			<ArrayItems Condition="(m_data[0] &amp; 1) == 1">
+				<Size>m_data[0] &gt;&gt; 1</Size>
+				<ValuePointer>(value_type*)((char*)&amp;m_data + alignment_of_t)</ValuePointer>
+			</ArrayItems>
+			<!--<Synthetic Name="mode" Condition="(m_data[0] &amp; 1) == 0">
+				<DisplayString>indirect mode</DisplayString>
+			</Synthetic>-->
+			<Item Name="size" Condition="(m_data[0] &amp; 1) == 0">(*(detail::header**)&amp;m_data)->m_size</Item>
+			<ArrayItems Condition="(m_data[0] &amp; 1) == 0">
+				<Size>(*(detail::header**)&amp;m_data)->m_size</Size>
+				<ValuePointer>(value_type*)((char*)(*(detail::header**)&amp;m_data) + offset_to_indirect_data)</ValuePointer>
+			</ArrayItems>
+		</Expand>
+	</Type>
+</AutoVisualizer>
