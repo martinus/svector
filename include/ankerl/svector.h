@@ -183,6 +183,8 @@ template <typename T, size_t MinInlineCapacity>
 class svector {
     static_assert(MinInlineCapacity <= 127, "sorry, can't have more than 127 direct elements");
     static constexpr auto N = detail::automatic_capacity<T>(MinInlineCapacity);
+    static constexpr auto alignment_of_t = std::alignment_of_v<T>;
+    static constexpr auto offset_to_indirect_data = detail::round_up(sizeof(detail::header), alignment_of_t);
 
     enum class direction { direct, indirect };
 
