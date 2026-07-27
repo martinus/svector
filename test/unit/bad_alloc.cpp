@@ -24,6 +24,14 @@
 #    endif
 #endif
 
+// g++ only gained __has_feature in version 14, so check its own macros too. Without this the
+// test below runs under -fsanitize=address and asan aborts on the huge allocation instead of
+// letting it throw std::bad_alloc.
+#if defined(__SANITIZE_ADDRESS__) || defined(__SANITIZE_THREAD__)
+#    undef SANITIZER_ACTIVE
+#    define SANITIZER_ACTIVE 1
+#endif
+
 TEST_CASE("reserve_bad_alloc") {
     if constexpr (RUNNING_ON_VALGRIND || SANITIZER_ACTIVE) {
         // this test doesn't work with valgrind or some sanitizers.
