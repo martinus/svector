@@ -175,6 +175,14 @@ struct storage : public header {
         // use void* to ensure we don't use an overload for T*
         return new (ptr) storage<T>(capacity);
     }
+
+    /**
+     * @brief Counterpart to alloc(). Does not touch the T's, they have to be destroyed already.
+     */
+    static void dealloc(storage<T>* ptr) {
+        std::destroy_at(ptr);
+        ::operator delete(ptr);
+    }
 };
 
 } // namespace detail
@@ -274,39 +282,48 @@ class svector {
     }
 
     /**
-     * @brief Grows and appends in a single step. Precondition: s == c, so we have to reallocate.
+     * @brief Moves all current elements into storage, frees the old one and adopts storage.
+     *
+     * Not a template, so every emplace_back instantiation shares this instead of inlining its
+     * own copy of the direct/indirect fork.
+     */
+    void take_over_storage(detail::storage<T>* storage, size_t new_size) {
+        if (is_direct()) {
+            uninitialized_move_and_destroy(data<direction::direct>(), storage->data(), size<direction::direct>());
+        } else {
+            uninitialized_move_and_destroy(data<direction::indirect>(), storage->data(), size<direction::indirect>());
+            detail::storage<T>::dealloc(indirect());
+        }
+        storage->size(new_size);
+        set_indirect(storage);
+    }
+
+    /**
+     * @brief Grows and appends in a single step. Precondition: size() == capacity().
      *
      * args may reference one of our own elements, as in v.push_back(v[0]). Reallocating first
      * would move that element into the new storage and destroy the original, leaving args
      * dangling, so the new element is constructed into the fresh storage while the old elements
      * are still untouched. Only afterwards are they moved over.
+     *
+     * emplace(cend(), ...) relies on this ordering too, don't turn it back into
+     * reallocate-then-construct.
      */
     template <class... Args>
-    auto emplace_back_grow(size_t s, size_t c, Args&&... args) -> T& {
-        // s + 1 > c >= N, so the new storage is always indirect
-        auto* storage = detail::storage<T>::alloc(calculate_new_capacity(s + 1, c));
+    auto emplace_back_grow(size_t s, Args&&... args) -> T& {
+        // s + 1 > capacity() >= N, so the new storage is always indirect
+        auto* storage = detail::storage<T>::alloc(calculate_new_capacity(s + 1, s));
 
         T* element = nullptr;
         try {
             element = new (static_cast<void*>(storage->data() + s)) T(std::forward<Args>(args)...);
         } catch (...) {
-            std::destroy_at(storage);
-            ::operator delete(storage);
+            detail::storage<T>::dealloc(storage);
             throw;
         }
 
         // args has been consumed, the old elements can be moved now
-        if (is_direct()) {
-            uninitialized_move_and_destroy(data<direction::direct>(), storage->data(), s);
-        } else {
-            uninitialized_move_and_destroy(data<direction::indirect>(), storage->data(), s);
-            auto* old_storage = indirect();
-            std::destroy_at(old_storage);
-            ::operator delete(old_storage);
-        }
-
-        storage->size(s + 1);
-        set_indirect(storage);
+        take_over_storage(storage, s + 1);
         return *element;
     }
 
@@ -314,6 +331,10 @@ class svector {
      * @brief Reallocates all data when capacity changes.
      *
      * if new_capacity <= N chooses direct memory, otherwise indirect.
+     *
+     * Invalidates every reference into the container, so any T const& argument that might be
+     * one of our own elements has to be copied out of the way before calling this. See
+     * is_reference_into_self().
      */
     void realloc(size_t new_capacity) {
         if (new_capacity <= N) {
@@ -327,24 +348,10 @@ class svector {
             auto* storage = indirect();
             uninitialized_move_and_destroy(storage->data(), direct_data(), storage->size());
             set_direct_and_size(storage->size());
-            std::destroy_at(storage);
-            ::operator delete(storage);
+            detail::storage<T>::dealloc(storage);
         } else {
             // put everything into indirect storage
-            auto* storage = detail::storage<T>::alloc(new_capacity);
-            if (is_direct()) {
-                // direct -> indirect
-                uninitialized_move_and_destroy(data<direction::direct>(), storage->data(), size<direction::direct>());
-                storage->size(size<direction::direct>());
-            } else {
-                // indirect -> indirect
-                uninitialized_move_and_destroy(data<direction::indirect>(), storage->data(), size<direction::indirect>());
-                storage->size(size<direction::indirect>());
-                auto* storage_direct = indirect();
-                std::destroy_at(storage_direct);
-                ::operator delete(storage_direct);
-            }
-            set_indirect(storage);
+            take_over_storage(detail::storage<T>::alloc(new_capacity), size());
         }
     }
 
@@ -558,6 +565,10 @@ class svector {
     }
 
     // makes space for uninitialized data of cout elements. Also updates size.
+    //
+    // Invalidates every reference into the container: the elements from pos onwards are either
+    // shifted right or moved into a fresh allocation. A T const& argument that might be one of
+    // our own elements has to be copied out of the way first, see is_reference_into_self().
     [[nodiscard]] auto make_uninitialized_space(T const* pos, size_t count) -> T* {
         if (is_direct()) {
             return make_uninitialized_space<direction::direct>(pos, count);
@@ -580,9 +591,7 @@ class svector {
             std::destroy_n(ptr, s);
         }
         if (!is_dir) {
-            auto* storage = indirect();
-            std::destroy_at(storage);
-            ::operator delete(storage);
+            detail::storage<T>::dealloc(indirect());
         }
         set_direct_and_size(0);
     }
@@ -712,9 +721,11 @@ public:
     }
 
     void resize(size_t count, T const& value) {
-        if (count > capacity() && is_reference_into_self(value)) {
+        if (is_reference_into_self(value)) {
             // reserve() below moves the elements into new storage and destroys the originals,
             // so value has to be copied out of the way first. v.resize(1000, v[0])
+            // Deliberately not also testing count > capacity(): duplicating the condition
+            // below would silently stop matching if that one ever changes.
             auto const tmp = value;
             resize(count, tmp);
             return;
@@ -776,23 +787,14 @@ public:
         }
 
         if (s == c) {
-            return emplace_back_grow(s, c, std::forward<Args>(args)...);
+            return emplace_back_grow(s, std::forward<Args>(args)...);
         }
 
-        T* ptr; // NOLINT(cppcoreguidelines-init-variables)
-        if (is_dir) {
-            ptr = data<direction::direct>() + s;
-        } else {
-            ptr = data<direction::indirect>() + s;
-        }
+        auto* ptr = (is_dir ? data<direction::direct>() : data<direction::indirect>()) + s;
         // construct before updating the size, so a throwing constructor doesn't leave the
         // vector claiming an element that was never built
         auto& element = *new (static_cast<void*>(ptr)) T(std::forward<Args>(args)...);
-        if (is_dir) {
-            set_size<direction::direct>(s + 1);
-        } else {
-            set_size<direction::indirect>(s + 1);
-        }
+        set_size(s + 1);
         return element;
     }
 
@@ -962,11 +964,25 @@ public:
     }
 
     auto insert(const_iterator pos, T const& value) -> iterator {
-        return emplace(pos, value);
+        if (is_reference_into_self(value)) {
+            // making space moves our elements around, so value has to be copied out of the
+            // way first. v.insert(v.begin(), v[0])
+            auto const tmp = value;
+            return insert(pos, tmp);
+        }
+        // not aliasing, so we can make space first and construct straight into it. Going
+        // through emplace() would build a temporary and then move it, for no reason.
+        auto* p = make_uninitialized_space(pos, 1);
+        return new (static_cast<void*>(p)) T(value);
     }
 
     auto insert(const_iterator pos, T&& value) -> iterator {
-        return emplace(pos, std::move(value));
+        if (is_reference_into_self(value)) {
+            auto tmp = std::move(value);
+            return insert(pos, std::move(tmp));
+        }
+        auto* p = make_uninitialized_space(pos, 1);
+        return new (static_cast<void*>(p)) T(std::move(value));
     }
 
     auto insert(const_iterator pos, size_t count, T const& value) -> iterator {
