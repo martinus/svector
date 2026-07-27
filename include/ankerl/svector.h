@@ -604,7 +604,16 @@ class svector {
     [[nodiscard]] auto make_uninitialized_space(T const* pos, size_t count) -> T* {
         auto* const p = const_cast<T*>(pos); // NOLINT(cppcoreguidelines-pro-type-const-cast)
         auto s = size<D>();
-        if (s + count > capacity<D>()) {
+
+        // Both written as subtractions so neither can wrap: s <= max_size() and s <= capacity()
+        // always hold. It used to say s + count > capacity(), which overflowed for a huge count,
+        // and the wrapped sum then looked small enough to fit, so the in place shift below ran
+        // straight past the end of the buffer. See issue #69.
+        if (count > max_size() - s) {
+            throw std::bad_alloc();
+        }
+
+        if (count > capacity<D>() - s) {
             return make_uninitialized_space_new<D>(s, p, count);
         }
 
