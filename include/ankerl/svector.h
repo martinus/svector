@@ -467,9 +467,18 @@ class svector {
                 std::destroy(d + count, d + current_size);
             }
         } else {
-            auto* d = data<D>();
-            for (auto ptr = d + current_size, end = d + count; ptr != end; ++ptr) {
-                new (static_cast<void*>(ptr)) T(std::forward<Args>(args)...);
+            // The hand written loop this replaces left everything it had already built behind when
+            // a constructor threw: the size still said current_size, so nothing ever destroyed
+            // them. These two clean up after themselves, which is the same reason insert() builds
+            // through them rather than looping. See issue #70.
+            //
+            // Value construction, not default construction: resize(n) on an svector<int> has to
+            // zero the new elements the way T() does.
+            auto* const first_new = data<D>() + current_size;
+            if constexpr (sizeof...(Args) == 0) {
+                std::uninitialized_value_construct_n(first_new, count - current_size);
+            } else {
+                std::uninitialized_fill_n(first_new, count - current_size, args...);
             }
         }
         set_size<D>(count);
