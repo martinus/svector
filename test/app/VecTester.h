@@ -4,6 +4,7 @@
 
 #include <doctest.h>
 #include <fmt/format.h>
+#include <fmt/ranges.h> // fmt::join
 
 #include <cstddef>
 #include <stdexcept>
