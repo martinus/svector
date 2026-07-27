@@ -30,6 +30,7 @@ test_sources = [
     'unit/member_types.cpp',
     'unit/move_relocation.cpp',
     'unit/n_eq_0.cpp',
+    'unit/noexcept_contract.cpp',
     'unit/pop_back.cpp',
     'unit/push_back.cpp',
     'unit/reserve.cpp',
