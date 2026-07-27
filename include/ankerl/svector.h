@@ -261,6 +261,56 @@ class svector {
     }
 
     /**
+     * @brief True when value is one of our own elements, e.g. from v.push_back(v[0]).
+     *
+     * Growing or shifting moves those elements around and destroys the originals, so anything
+     * that takes a T const& has to copy it out of the way first. Compared as uintptr_t because
+     * relational operators on pointers into different objects are not specified.
+     */
+    [[nodiscard]] auto is_reference_into_self(T const& value) const -> bool {
+        auto const p = reinterpret_cast<uintptr_t>(std::addressof(value));
+        auto const first = reinterpret_cast<uintptr_t>(data());
+        return p >= first && p < first + (sizeof(T) * size());
+    }
+
+    /**
+     * @brief Grows and appends in a single step. Precondition: s == c, so we have to reallocate.
+     *
+     * args may reference one of our own elements, as in v.push_back(v[0]). Reallocating first
+     * would move that element into the new storage and destroy the original, leaving args
+     * dangling, so the new element is constructed into the fresh storage while the old elements
+     * are still untouched. Only afterwards are they moved over.
+     */
+    template <class... Args>
+    auto emplace_back_grow(size_t s, size_t c, Args&&... args) -> T& {
+        // s + 1 > c >= N, so the new storage is always indirect
+        auto* storage = detail::storage<T>::alloc(calculate_new_capacity(s + 1, c));
+
+        T* element = nullptr;
+        try {
+            element = new (static_cast<void*>(storage->data() + s)) T(std::forward<Args>(args)...);
+        } catch (...) {
+            std::destroy_at(storage);
+            ::operator delete(storage);
+            throw;
+        }
+
+        // args has been consumed, the old elements can be moved now
+        if (is_direct()) {
+            uninitialized_move_and_destroy(data<direction::direct>(), storage->data(), s);
+        } else {
+            uninitialized_move_and_destroy(data<direction::indirect>(), storage->data(), s);
+            auto* old_storage = indirect();
+            std::destroy_at(old_storage);
+            ::operator delete(old_storage);
+        }
+
+        storage->size(s + 1);
+        set_indirect(storage);
+        return *element;
+    }
+
+    /**
      * @brief Reallocates all data when capacity changes.
      *
      * if new_capacity <= N chooses direct memory, otherwise indirect.
@@ -606,6 +656,13 @@ public:
     }
 
     void assign(size_t count, T const& value) {
+        if (is_reference_into_self(value)) {
+            // clear() destroys every element, including the one value refers to.
+            // Copy it to the stack first, then it's an ordinary assign. v.assign(1000, v[0])
+            auto const tmp = value;
+            assign(count, tmp);
+            return;
+        }
         clear();
         resize(count, value);
     }
@@ -655,6 +712,13 @@ public:
     }
 
     void resize(size_t count, T const& value) {
+        if (count > capacity() && is_reference_into_self(value)) {
+            // reserve() below moves the elements into new storage and destroys the originals,
+            // so value has to be copied out of the way first. v.resize(1000, v[0])
+            auto const tmp = value;
+            resize(count, tmp);
+            return;
+        }
         if (count > capacity()) {
             reserve(count);
         }
@@ -712,21 +776,24 @@ public:
         }
 
         if (s == c) {
-            auto new_capacity = calculate_new_capacity(s + 1, c);
-            realloc(new_capacity);
-            // reallocation happened, so we definitely are now in indirect mode
-            is_dir = false;
+            return emplace_back_grow(s, c, std::forward<Args>(args)...);
         }
 
         T* ptr; // NOLINT(cppcoreguidelines-init-variables)
         if (is_dir) {
             ptr = data<direction::direct>() + s;
-            set_size<direction::direct>(s + 1);
         } else {
             ptr = data<direction::indirect>() + s;
+        }
+        // construct before updating the size, so a throwing constructor doesn't leave the
+        // vector claiming an element that was never built
+        auto& element = *new (static_cast<void*>(ptr)) T(std::forward<Args>(args)...);
+        if (is_dir) {
+            set_size<direction::direct>(s + 1);
+        } else {
             set_size<direction::indirect>(s + 1);
         }
-        return *new (static_cast<void*>(ptr)) T(std::forward<Args>(args)...);
+        return element;
     }
 
     void push_back(T const& value) {
@@ -879,8 +946,19 @@ public:
 
     template <class... Args>
     auto emplace(const_iterator pos, Args&&... args) -> iterator {
+        if (pos == cend()) {
+            // no elements have to move out of the way, and emplace_back already builds the
+            // new element before it grows, so args referencing us is fine there
+            return std::addressof(emplace_back(std::forward<Args>(args)...));
+        }
+
+        // args may reference one of our own elements, and making space either shifts those
+        // elements right or moves them into a new allocation, either of which leaves args
+        // dangling. Build the element first. Inserting in the middle already moves every
+        // element after pos, so one extra move does not change the cost.
+        auto tmp = T(std::forward<Args>(args)...);
         auto* p = make_uninitialized_space(pos, 1);
-        return new (static_cast<void*>(p)) T(std::forward<Args>(args)...);
+        return new (static_cast<void*>(p)) T(std::move(tmp));
     }
 
     auto insert(const_iterator pos, T const& value) -> iterator {
@@ -892,6 +970,12 @@ public:
     }
 
     auto insert(const_iterator pos, size_t count, T const& value) -> iterator {
+        if (is_reference_into_self(value)) {
+            // making space moves our elements around, so value has to be copied out of the
+            // way first. v.insert(v.begin(), 1000, v[0])
+            auto const tmp = value;
+            return insert(pos, count, tmp);
+        }
         auto* p = make_uninitialized_space(pos, count);
         std::uninitialized_fill_n(p, count, value);
         return p;
