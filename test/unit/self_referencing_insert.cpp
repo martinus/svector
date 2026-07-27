@@ -1,15 +1,26 @@
 // Tests for https://github.com/martinus/svector/issues/50
 //
-// Every operation that takes a T const& has to keep working when that reference points into
-// the vector itself, e.g. v.push_back(v[0]), even when the call reallocates. This is required
-// for std::vector (LWG 526) and all three major standard libraries honour it.
+// Operations taking a T const& have to keep working when that reference points into the vector
+// itself, e.g. v.push_back(v[0]), even when the call reallocates.
 //
-// Note that the iterator range overloads are deliberately not covered: the standard says the
-// iterators passed to insert(pos, first, last) and assign(first, last) must not point into the
-// container, so aliasing there stays undefined.
+// What the standard actually requires, from [sequence.reqmts]:
+//
+//   a.push_back(t)      no restriction  -> must work
+//   a.insert(p, t)      no restriction  -> must work
+//   a.insert(p, n, t)   no restriction  -> must work
+//   vector::resize(n,c) no restriction  -> must work
+//   a.assign(n, t)      "t is not a reference into a"  -> undefined
+//
+// So assign() is the odd one out. libstdc++ happens to survive it, libc++ and MSVC produce
+// empty strings. svector handles it anyway because issue #50 asks for it, but std::vector
+// cannot be used as the oracle there, it is within its rights to do anything.
+//
+// The iterator range overloads are not covered at all: the iterators passed to
+// insert(pos, first, last) and assign(first, last) must not point into the container either.
 
 #include <ankerl/svector.h>
 #include <app/Counter.h>
+#include <app/VecTester.h>
 
 #include <doctest.h>
 
@@ -34,13 +45,8 @@ void fill_to_capacity(Vec& v) {
     REQUIRE(v.size() == v.capacity()); // otherwise the test isn't exercising a reallocation
 }
 
-template <typename Vec>
-auto dump(Vec const& v) -> std::vector<std::string> {
-    return std::vector<std::string>(v.begin(), v.end());
-}
-
-// Runs op on an svector and on a std::vector holding the same elements, and requires that
-// both end up identical. std::vector is the oracle for what the standard mandates.
+// Runs op on an svector and on a std::vector holding the same elements, and requires that both
+// end up identical. std::vector is the oracle for what the standard mandates.
 template <typename Op>
 void same_as_std_vector(Op op) {
     auto sv = ankerl::svector<std::string, 3>();
@@ -51,7 +57,7 @@ void same_as_std_vector(Op op) {
     fill_to_capacity(vec);
     op(vec);
 
-    REQUIRE(dump(sv) == dump(vec));
+    assert_eq(vec, sv);
 }
 
 } // namespace
@@ -123,10 +129,18 @@ TEST_CASE("self_ref_emplace_end") {
 }
 
 TEST_CASE("self_ref_assign") {
-    // the case from the issue: assign() clears first, which destroys the element value refers to
-    same_as_std_vector([](auto& v) {
-        v.assign(1000, v[0]);
-    });
+    // The case from the issue: assign() clears first, which destroys the element value refers
+    // to. [sequence.reqmts] says "t is not a reference into a" for assign, so this is undefined
+    // for std::vector and libc++/MSVC really do return empty strings. svector guarantees it
+    // anyway, so check that directly rather than against std::vector.
+    auto v = ankerl::svector<std::string, 3>();
+    fill_to_capacity(v);
+
+    v.assign(1000, v[0]);
+    REQUIRE(v.size() == 1000);
+    for (auto const& s : v) {
+        REQUIRE(s == marker);
+    }
 }
 
 TEST_CASE("self_ref_resize") {
@@ -149,15 +163,15 @@ TEST_CASE("self_ref_without_reallocation") {
 
     sv.push_back(sv[0]);
     vec.push_back(vec[0]);
-    REQUIRE(dump(sv) == dump(vec));
+    assert_eq(vec, sv);
 
     sv.insert(sv.begin(), sv[3]);
     vec.insert(vec.begin(), vec[3]);
-    REQUIRE(dump(sv) == dump(vec));
+    assert_eq(vec, sv);
 
     sv.insert(sv.begin() + 2, 4, sv[1]);
     vec.insert(vec.begin() + 2, 4, vec[1]);
-    REQUIRE(dump(sv) == dump(vec));
+    assert_eq(vec, sv);
 }
 
 TEST_CASE("self_ref_direct_to_indirect") {
@@ -243,5 +257,5 @@ TEST_CASE("self_ref_trivial_type") {
     sv.resize(500, sv[0]);
     vec.resize(500, vec[0]);
 
-    REQUIRE(std::vector<int>(sv.begin(), sv.end()) == vec);
+    assert_eq(vec, sv);
 }
