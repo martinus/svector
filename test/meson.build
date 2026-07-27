@@ -56,13 +56,15 @@ if get_option('cpp_args').contains('-m32')
     fmt_method = 'builtin'
 endif
 
-# Optional, only used by the benchmarks and by show_comparison. Both are guarded by
-# __has_include in app/boost_absl.h, so everything still builds when they are missing.
-# abseil used to have a wrap here, but a wrap is only consulted for a fallback, and meson
-# never falls back for an optional dependency: absl_container came up NO on every CI run
-# and the subproject was only ever built by --wrap-mode=forcefallback. Install abseil
-# system wide to get the absl comparison back.
-opt_boost = dependency('boost', required: false)
+# boost and abseil are only used to compare against in the benchmarks and in
+# show_comparison, never by the actual tests. Both are guarded by __has_include in
+# app/boost_absl.h, so everything builds fine without them and the comparison comes back
+# by itself once the headers are installed system wide.
+#
+# Neither is fetched here any more. abseil had a wrap, but a wrap is only consulted as a
+# fallback and meson does not fall back for an optional dependency, so absl_container came
+# up NO on every CI run anyway. boost was resolving, but pulling it in cost the linux job
+# up to 59s of apt for code that meson test never executes.
 
 test_exe = executable(
     'test-svector',
@@ -73,7 +75,6 @@ test_exe = executable(
         dependency('threads'), # add dependency for threads (-lpthread, see https://mesonbuild.com/howtox.html),
 
         # see what's in the [provide] sections for the dependency names
-        opt_boost,
         dependency('doctest'),
         dependency('fmt', method: fmt_method),
     ],

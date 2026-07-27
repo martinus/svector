@@ -34,18 +34,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    - run: sudo apt-get install -yq libboost-dev
     - uses: hendrikmuhs/ccache-action@v1.2
       with:
         key: linux
     - uses: actions/setup-python@v5
       with:
         python-version: '3.x'
+        cache: pip
+        cache-dependency-path: .github/workflows/requirements.txt
     - uses: actions/cache@v4
       with:
         path: ${{ env.MESON_PACKAGE_CACHE }}
         key: wraps-${{ hashFiles('subprojects/*.wrap') }}
-    - run: pip install meson ninja
+    - run: pip install -r .github/workflows/requirements.txt
     - run: meson setup builddir/
       env:
         CXX: ccache c++
@@ -63,9 +64,8 @@ jobs:
     - uses: actions/setup-python@v5
       with:
         python-version: '3.x'
-    # gcc used to be installed here but nothing uses it: the build runs with CXX=c++,
-    # which is AppleClang. Brewing gcc was the single most expensive step in this job.
-    - run: brew install boost
+        cache: pip
+        cache-dependency-path: .github/workflows/requirements.txt
     - uses: hendrikmuhs/ccache-action@v1.2
       with:
         key: macos
@@ -73,7 +73,7 @@ jobs:
       with:
         path: ${{ env.MESON_PACKAGE_CACHE }}
         key: wraps-${{ hashFiles('subprojects/*.wrap') }}
-    - run: pip install meson ninja
+    - run: pip install -r .github/workflows/requirements.txt
     - run: meson setup builddir/
       env:
         CXX: ccache c++
@@ -91,6 +91,8 @@ jobs:
     - uses: actions/setup-python@v5
       with:
         python-version: '3.x'
+        cache: pip
+        cache-dependency-path: .github/workflows/requirements.txt
     # This job had no compiler cache at all and was by far the slowest. ccache does not
     # support MSVC, sccache does.
     - uses: hendrikmuhs/ccache-action@v1.2
@@ -101,7 +103,7 @@ jobs:
       with:
         path: ${{ env.MESON_PACKAGE_CACHE }}
         key: wraps-${{ hashFiles('subprojects/*.wrap') }}
-    - run: pip install meson ninja
+    - run: pip install -r .github/workflows/requirements.txt
     - uses: ilammy/msvc-dev-cmd@v1
     - run: meson setup builddir
       env:
@@ -127,11 +129,13 @@ jobs:
     - uses: actions/setup-python@v5
       with:
         python-version: '3.x'
+        cache: pip
+        cache-dependency-path: .github/workflows/requirements.txt
     - uses: actions/cache@v4
       with:
         path: ${{ env.MESON_PACKAGE_CACHE }}
         key: wraps-${{ hashFiles('subprojects/*.wrap') }}
-    - run: pip install meson ninja
+    - run: pip install -r .github/workflows/requirements.txt
     - run: >
         meson setup builddir/
         --buildtype=debugoptimized
@@ -161,11 +165,13 @@ jobs:
     - uses: actions/setup-python@v5
       with:
         python-version: '3.x'
+        cache: pip
+        cache-dependency-path: .github/workflows/requirements.txt
     - uses: actions/cache@v4
       with:
         path: ${{ env.MESON_PACKAGE_CACHE }}
         key: wraps-${{ hashFiles('subprojects/*.wrap') }}
-    - run: pip install meson ninja
+    - run: pip install -r .github/workflows/requirements.txt
     - run: >
         meson setup builddir/
         --buildtype=debugoptimized
