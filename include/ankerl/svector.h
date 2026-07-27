@@ -618,11 +618,70 @@ class svector {
     // Invalidates every reference into the container: the elements from pos onwards are either
     // shifted right or moved into a fresh allocation. A T const& argument that might be one of
     // our own elements has to be copied out of the way first, see is_reference_into_self().
+    //
+    // size() already counts the gap when this returns, so between here and the caller filling it
+    // the container is claiming raw memory. Whoever constructs into the gap has to call
+    // close_gap() if that throws, see issue #68.
     [[nodiscard]] auto make_uninitialized_space(T const* pos, size_t count) -> T* {
         if (is_direct()) {
             return make_uninitialized_space<direction::direct>(pos, count);
         }
         return make_uninitialized_space<direction::indirect>(pos, count);
+    }
+
+    /**
+     * @brief Makes room for count elements at pos and has fill construct them into it.
+     *
+     * fill(p) has to construct all count elements at p, or none: the standard uninitialized_*
+     * algorithms clean up after themselves, and a single placement new either works or builds
+     * nothing. If it throws, the gap is closed again before the exception continues.
+     */
+    template <typename Fill>
+    auto fill_uninitialized_space(T const* pos, size_t count, Fill fill) -> T* {
+        auto* p = make_uninitialized_space(pos, count);
+        try {
+            fill(p);
+        } catch (...) {
+            close_gap(p, count);
+            throw;
+        }
+        return p;
+    }
+
+    /**
+     * @brief Undoes a make_uninitialized_space() whose gap could not be filled.
+     *
+     * Precondition: nothing is constructed in [gap_begin, gap_begin + count). The standard
+     * algorithms used to fill it destroy whatever they managed to build before rethrowing, and a
+     * single placement new either succeeds or constructs nothing.
+     *
+     * Runs while an exception is in flight, so it must not throw itself. When relocating a T
+     * cannot throw we shift the tail back down and end up with exactly the elements we started
+     * with. Otherwise the only safe thing left is to drop the tail, which still leaves a container
+     * that is valid and destroys cleanly, just shorter. std::move_if_noexcept, which is how one
+     * would normally keep the elements of a throwing-move type, is not available here: falling
+     * back to a copy could throw a second exception during unwinding and call std::terminate.
+     */
+    void close_gap(T* gap_begin, size_t count) noexcept {
+        auto* const first = data();
+        auto* const last = first + size();
+        auto* const tail = gap_begin + count;
+
+        if constexpr (std::is_nothrow_move_constructible_v<T> && std::is_nothrow_move_assignable_v<T>) {
+            // Mirror image of shift_right: the destination starts with the raw gap, which has to
+            // be constructed into, and only what lands past it can be assigned.
+            auto const tail_size = static_cast<size_t>(last - tail);
+            auto const num_uninitialized_move = (std::min)(count, tail_size);
+            std::uninitialized_move_n(tail, num_uninitialized_move, gap_begin);
+            std::move(tail + num_uninitialized_move, last, gap_begin + num_uninitialized_move);
+
+            // whatever the shift did not overwrite is moved-from but still alive
+            std::destroy((std::max)(gap_begin + tail_size, tail), last);
+            set_size(size() - count);
+        } else {
+            std::destroy(tail, last);
+            set_size(static_cast<size_t>(gap_begin - first));
+        }
     }
 
     void destroy() {
@@ -1020,8 +1079,9 @@ public:
         // dangling. Build the element first. Inserting in the middle already moves every
         // element after pos, so one extra move does not change the cost.
         auto tmp = T(std::forward<Args>(args)...);
-        auto* p = make_uninitialized_space(pos, 1);
-        return new (static_cast<void*>(p)) T(std::move(tmp));
+        return fill_uninitialized_space(pos, 1, [&](T* p) {
+            new (static_cast<void*>(p)) T(std::move(tmp));
+        });
     }
 
     auto insert(const_iterator pos, T const& value) -> iterator {
@@ -1033,8 +1093,9 @@ public:
         }
         // not aliasing, so we can make space first and construct straight into it. Going
         // through emplace() would build a temporary and then move it, for no reason.
-        auto* p = make_uninitialized_space(pos, 1);
-        return new (static_cast<void*>(p)) T(value);
+        return fill_uninitialized_space(pos, 1, [&](T* p) {
+            new (static_cast<void*>(p)) T(value);
+        });
     }
 
     auto insert(const_iterator pos, T&& value) -> iterator {
@@ -1042,8 +1103,9 @@ public:
             auto tmp = std::move(value);
             return insert(pos, std::move(tmp));
         }
-        auto* p = make_uninitialized_space(pos, 1);
-        return new (static_cast<void*>(p)) T(std::move(value));
+        return fill_uninitialized_space(pos, 1, [&](T* p) {
+            new (static_cast<void*>(p)) T(std::move(value));
+        });
     }
 
     auto insert(const_iterator pos, size_t count, T const& value) -> iterator {
@@ -1053,9 +1115,9 @@ public:
             auto const tmp = value;
             return insert(pos, count, tmp);
         }
-        auto* p = make_uninitialized_space(pos, count);
-        std::uninitialized_fill_n(p, count, value);
-        return p;
+        return fill_uninitialized_space(pos, count, [&](T* p) {
+            std::uninitialized_fill_n(p, count, value);
+        });
     }
 
     template <typename It>
@@ -1080,9 +1142,10 @@ public:
 
     template <typename It>
     auto insert(const_iterator pos, It first, It last, std::forward_iterator_tag /*unused*/) -> iterator {
-        auto* p = make_uninitialized_space(pos, std::distance(first, last));
-        std::uninitialized_copy(first, last, p);
-        return p;
+        auto const count = static_cast<size_t>(std::distance(first, last));
+        return fill_uninitialized_space(pos, count, [&](T* p) {
+            std::uninitialized_copy(first, last, p);
+        });
     }
 
     template <typename InputIt, typename = detail::enable_if_t<detail::is_input_iterator<InputIt>>>

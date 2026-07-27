@@ -27,6 +27,7 @@ test_sources = [
     'unit/fuzz_corpus.cpp',
     'unit/includes_only.cpp',
     'unit/insert.cpp',
+    'unit/insert_exception_safety.cpp',
     'unit/member_types.cpp',
     'unit/move_relocation.cpp',
     'unit/n_eq_0.cpp',
