@@ -140,6 +140,17 @@ auto Counter::Obj::operator=(const Counter::Obj& o) -> Counter::Obj& {
 }
 
 auto Counter::Obj::operator=(Counter::Obj&& o) noexcept -> Counter::Obj& {
+    // A container moving an element onto itself means it handed an overlapping range to
+    // std::move or std::move_backward, which neither allows. That was #65 and #66, and the plain
+    // field copy below hid both: a self move keeps the value, so the differential tests saw
+    // nothing. Deliberately not under COUNTER_ENABLE_UNORDERED_SET, it costs one comparison.
+    //
+    // Only sound because Obj exists to be put into containers. x = std::move(x) written by hand
+    // is allowed to leave x in any valid state, so a general purpose type could not check this.
+    if (this == &o) {
+        test::print("ERROR at {}({}): {} self move assignment\n", __FILE__, __LINE__, __func__);
+        std::abort();
+    }
 #if COUNTER_ENABLE_UNORDERED_SET
     if (1 != singletonConstructedObjects().count(this) || 1 != singletonConstructedObjects().count(&o)) {
         test::print("ERROR at {}({}): {}\n", __FILE__, __LINE__, __func__);
