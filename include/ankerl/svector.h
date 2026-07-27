@@ -284,15 +284,27 @@ class svector {
     /**
      * @brief Moves all current elements into storage, frees the old one and adopts storage.
      *
+     * Takes ownership of storage even when it fails: T's move constructor is allowed to throw,
+     * and then nothing here has happened yet, so storage has to be freed again on the way out or
+     * it leaks. num_constructed says how many elements the caller has already built at the end of
+     * storage, which then have to be destroyed too. std::uninitialized_move_n already cleans up
+     * whatever it managed to move itself.
+     *
      * Not a template, so every emplace_back instantiation shares this instead of inlining its
      * own copy of the direct/indirect fork.
      */
-    void take_over_storage(detail::storage<T>* storage, size_t new_size) {
-        if (is_direct()) {
-            uninitialized_move_and_destroy(data<direction::direct>(), storage->data(), size<direction::direct>());
-        } else {
-            uninitialized_move_and_destroy(data<direction::indirect>(), storage->data(), size<direction::indirect>());
-            detail::storage<T>::dealloc(indirect());
+    void take_over_storage(detail::storage<T>* storage, size_t new_size, size_t num_constructed = 0) {
+        try {
+            if (is_direct()) {
+                uninitialized_move_and_destroy(data<direction::direct>(), storage->data(), size<direction::direct>());
+            } else {
+                uninitialized_move_and_destroy(data<direction::indirect>(), storage->data(), size<direction::indirect>());
+                detail::storage<T>::dealloc(indirect());
+            }
+        } catch (...) {
+            std::destroy_n(storage->data() + new_size - num_constructed, num_constructed);
+            detail::storage<T>::dealloc(storage);
+            throw;
         }
         storage->size(new_size);
         set_indirect(storage);
@@ -322,8 +334,9 @@ class svector {
             throw;
         }
 
-        // args has been consumed, the old elements can be moved now
-        take_over_storage(storage, s + 1);
+        // args has been consumed, the old elements can be moved now. If that throws, element is
+        // the one thing already built in storage, so tell take_over_storage to clean it up.
+        take_over_storage(storage, s + 1, 1);
         return *element;
     }
 
@@ -673,7 +686,16 @@ public:
         set_size(s);
     }
 
-    svector(svector&& other) noexcept
+    /**
+     * @brief Moving is only noexcept when moving a T is.
+     *
+     * std::vector can promise this unconditionally because its move only steals a pointer. In
+     * direct mode we have to relocate the inline elements instead, which calls T's move
+     * constructor, so the promise is only ours to make when that one is noexcept. Claiming it
+     * anyway turns a throwing move into std::terminate, and makes std::move_if_noexcept pick us
+     * up for a move where it should have fallen back to a copy. See issue #63.
+     */
+    svector(svector&& other) noexcept(std::is_nothrow_move_constructible_v<T>)
         : svector() {
         do_move_assign(std::move(other));
     }
@@ -715,7 +737,8 @@ public:
         return *this;
     }
 
-    auto operator=(svector&& other) noexcept -> svector& {
+    // conditional for the same reason as the move constructor, see there
+    auto operator=(svector&& other) noexcept(std::is_nothrow_move_constructible_v<T>) -> svector& {
         if (&other == this) {
             // It doesn't seem to be required to do self-check, but let's do it anyways to be safe
             return *this;
