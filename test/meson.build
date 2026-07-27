@@ -37,6 +37,7 @@ test_sources = [
     'unit/reverse_iterators.cpp',
     'unit/round_up.cpp',
     'unit/show_comparison.cpp',
+    'unit/self_referencing_insert.cpp',
     'unit/shrink_to_fit.cpp',
     'unit/std_erase.cpp',
     'unit/swap.cpp',
