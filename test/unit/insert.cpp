@@ -7,6 +7,8 @@
 
 #include <forward_list>
 #include <iostream>
+#include <limits>
+#include <new>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -212,4 +214,33 @@ TEST_CASE("insert_nothing_keeps_the_elements_indirect") {
     sv.insert(sv.cbegin() + 10, 0, std::string("x"));
     vec.insert(vec.cbegin() + 10, 0, std::string("x"));
     assert_eq(vec, sv);
+}
+
+// make_uninitialized_space() decided whether the elements still fit with "s + count >
+// capacity()". A huge count wrapped that sum around to something small, so the check said yes and
+// the in place shift wrote past the end of the buffer. See issue #69.
+TEST_CASE("insert_count_too_large_throws") {
+    auto const huge = (std::numeric_limits<size_t>::max)();
+
+    // max_size() is the first count that cannot work, huge is the one that used to wrap
+    for (auto const count : {huge, ankerl::svector<int, 4>::max_size()}) {
+        auto v = ankerl::svector<int, 4>{1, 2, 3};
+        REQUIRE_THROWS_AS(v.insert(v.begin(), count, 5), std::bad_alloc);
+
+        // the failed insert left it alone
+        REQUIRE(v.size() == 3);
+        REQUIRE(v[0] == 1);
+        REQUIRE(v[2] == 3);
+    }
+}
+
+TEST_CASE("insert_count_too_large_throws_indirect") {
+    auto v = ankerl::svector<int, 4>();
+    for (int i = 0; i < 50; ++i) {
+        v.push_back(i);
+    }
+
+    REQUIRE_THROWS_AS(v.insert(v.begin() + 10, (std::numeric_limits<size_t>::max)(), 5), std::bad_alloc);
+    REQUIRE(v.size() == 50);
+    REQUIRE(v[10] == 10);
 }
