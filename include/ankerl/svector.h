@@ -134,7 +134,7 @@ public:
 template <typename T>
 struct storage : public header {
     static constexpr auto alignment_of_t = std::alignment_of_v<T>;
-	static constexpr auto max_alignment = (std::max)(std::alignment_of_v<header>, std::alignment_of_v<T>);
+    static constexpr auto max_alignment = (std::max)(std::alignment_of_v<header>, std::alignment_of_v<T>);
     static constexpr auto offset_to_data = detail::round_up(sizeof(header), alignment_of_t);
     static_assert(max_alignment <= __STDCPP_DEFAULT_NEW_ALIGNMENT__);
 
@@ -164,7 +164,7 @@ struct storage : public header {
             throw std::bad_alloc();
         }
         mem += offset_to_data;
-		if (static_cast<uint64_t>(mem) > static_cast<uint64_t>((std::numeric_limits<std::ptrdiff_t>::max)())) {
+        if (static_cast<uint64_t>(mem) > static_cast<uint64_t>((std::numeric_limits<std::ptrdiff_t>::max)())) {
             throw std::bad_alloc();
         }
 
@@ -317,7 +317,7 @@ class svector {
             // got an overflow, set capacity to max
             new_capacity = max_size();
         }
-		return (std::min)(new_capacity, max_size());
+        return (std::min)(new_capacity, max_size());
     }
 
     template <direction D>
@@ -405,7 +405,7 @@ class svector {
     auto erase_checked_end(T const* cfrom, T const* to) -> T* {
         auto* const erase_begin = const_cast<T*>(cfrom); // NOLINT(cppcoreguidelines-pro-type-const-cast)
         auto* const container_end = data<D>() + size<D>();
-        auto* const erase_end = std::min(const_cast<T*>(to), container_end); // NOLINT(cppcoreguidelines-pro-type-const-cast)
+        auto* const erase_end = (std::min)(const_cast<T*>(to), container_end); // NOLINT(cppcoreguidelines-pro-type-const-cast)
 
         std::move(erase_end, container_end, erase_begin);
         auto const num_erased = std::distance(erase_begin, erase_end);
@@ -466,10 +466,10 @@ class svector {
         // 1. uninitialized moves
         auto const num_moves = std::distance(source_begin, source_end);
         auto const target_end = target_begin + num_moves;
-        auto const num_uninitialized_move = std::min(num_moves, std::distance(source_end, target_end));
+        auto const num_uninitialized_move = (std::min)(num_moves, std::distance(source_end, target_end));
         std::uninitialized_move(source_end - num_uninitialized_move, source_end, target_end - num_uninitialized_move);
         std::move_backward(source_begin, source_end - num_uninitialized_move, target_end - num_uninitialized_move);
-        std::destroy(source_begin, std::min(source_end, target_begin));
+        std::destroy(source_begin, (std::min)(source_end, target_begin));
     }
 
     template <direction D>
@@ -846,7 +846,7 @@ public:
     }
 
     [[nodiscard]] static auto max_size() -> size_t {
-		return (std::numeric_limits<std::ptrdiff_t>::max)();
+        return (std::numeric_limits<std::ptrdiff_t>::max)();
     }
 
     void swap(svector& other) {
