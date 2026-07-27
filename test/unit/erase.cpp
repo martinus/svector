@@ -1,8 +1,12 @@
 #include <ankerl/svector.h>
 
 #include <app/Counter.h>
+#include <app/VecTester.h>
 
 #include <doctest.h>
+
+#include <string>
+#include <vector>
 
 TEST_CASE("erase_single") {
     auto counts = Counter();
@@ -60,4 +64,22 @@ TEST_CASE("erase_range") {
     sv.erase(sv.begin(), sv.end() - 1);
     REQUIRE(sv.size() == 1);
     REQUIRE(sv.front().get() == 9);
+}
+
+// Erasing an empty range has to leave the container exactly as it was. It used to move the tail
+// onto itself, self-move-assigning every element from first onwards and blanking them. See #66.
+TEST_CASE("erase_nothing_keeps_the_elements") {
+    // 3 stays inline, 50 is indirect
+    for (auto const count : {size_t{3}, size_t{50}}) {
+        auto const source = make_long_strings(count);
+        for (auto const pos : {size_t{0}, count / 2, count}) {
+            auto sv = ankerl::svector<std::string, 4>(source.begin(), source.end());
+            auto vec = source;
+
+            auto* it = sv.erase(sv.cbegin() + pos, sv.cbegin() + pos);
+            vec.erase(vec.cbegin() + pos, vec.cbegin() + pos);
+            REQUIRE(it == sv.begin() + pos);
+            assert_eq(vec, sv);
+        }
+    }
 }

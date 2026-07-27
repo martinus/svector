@@ -203,13 +203,9 @@ TEST_CASE("insert_nothing_keeps_the_elements") {
 
 // same thing once the vector is indirect, so both storage modes are covered
 TEST_CASE("insert_nothing_keeps_the_elements_indirect") {
-    auto sv = ankerl::svector<std::string, 4>();
-    auto vec = std::vector<std::string>();
-    for (int i = 0; i < 50; ++i) {
-        auto const s = std::string(40, static_cast<char>('a' + (i % 26)));
-        sv.push_back(s);
-        vec.push_back(s);
-    }
+    auto const vec_source = make_long_strings(50);
+    auto sv = ankerl::svector<std::string, 4>(vec_source.begin(), vec_source.end());
+    auto vec = vec_source;
     // more elements than fit inline, so this one is indirect
     REQUIRE(sv.size() > ankerl::svector<std::string, 4>().capacity());
 

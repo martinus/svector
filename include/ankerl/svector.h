@@ -475,15 +475,23 @@ class svector {
         set_size<D>(count);
     }
 
-    // Makes sure that to is not past the end iterator
+    // Makes sure that to is not past the end iterator, and does nothing when that leaves an empty
+    // range to erase
     template <direction D>
     auto erase_checked_end(T const* cfrom, T const* to) -> T* {
         auto* const erase_begin = const_cast<T*>(cfrom); // NOLINT(cppcoreguidelines-pro-type-const-cast)
         auto* const container_end = data<D>() + size<D>();
         auto* const erase_end = (std::min)(const_cast<T*>(to), container_end); // NOLINT(cppcoreguidelines-pro-type-const-cast)
+        auto const num_erased = std::distance(erase_begin, erase_end);
+
+        if (num_erased == 0) {
+            // Not just a shortcut: std::move below would be handed a destination equal to its
+            // source begin, which it does not allow, and it would self-move-assign every element
+            // from here to the end. See issue #66.
+            return erase_begin;
+        }
 
         std::move(erase_end, container_end, erase_begin);
-        auto const num_erased = std::distance(erase_begin, erase_end);
         std::destroy(container_end - num_erased, container_end);
         set_size<D>(size<D>() - num_erased);
         return erase_begin;

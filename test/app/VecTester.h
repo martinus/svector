@@ -8,7 +8,24 @@
 
 #include <cstddef>
 #include <stdexcept>
+#include <string>
 #include <vector>
+
+/**
+ * @brief count distinct strings, each long enough that it really allocates.
+ *
+ * Some bugs only show up on a type whose move assignment does something. std::string qualifies,
+ * but only while it is too long for the small string optimization, otherwise a self-move leaves
+ * the bytes in place and the damage is invisible. See issue #67.
+ */
+inline auto make_long_strings(size_t count) -> std::vector<std::string> {
+    auto v = std::vector<std::string>();
+    v.reserve(count);
+    for (size_t i = 0; i < count; ++i) {
+        v.emplace_back(40, static_cast<char>('a' + (i % 26)));
+    }
+    return v;
+}
 
 template <typename VecA, typename VecB>
 void assert_eq(VecA const& a, VecB const& b) {
