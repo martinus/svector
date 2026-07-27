@@ -57,47 +57,57 @@ static_assert(std::is_nothrow_move_assignable_v<SvString>);
 static_assert(!std::is_nothrow_move_constructible_v<SvThrowing>);
 static_assert(!std::is_nothrow_move_assignable_v<SvThrowing>);
 
-// swap is a move construction plus two move assignments, so it carries the same condition
+// swap is a move construction plus two move assignments, so it carries the same condition. This
+// is the one place where svector cannot match std::vector, whose swap is noexcept for any T
+// because it only exchanges pointers.
 static_assert(std::is_nothrow_swappable_v<SvString>);
 static_assert(!std::is_nothrow_swappable_v<SvThrowing>);
 
-// Everything else either cannot throw at all or always can, independently of T. Those have to
-// agree with std::vector, otherwise svector is not a drop in replacement for code that asks.
-//
 // Only ever named inside noexcept(), which does not evaluate its operand, so these need no
 // definition.
 extern SvString sv;                  // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 extern std::vector<std::string> vec; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 
-#define SAME_AS_STD_VECTOR(call) static_assert(noexcept(sv.call) == noexcept(vec.call), #call)
+// [vector.overview] spells these out as noexcept, so every conforming std::vector agrees and
+// svector can be held to the same guarantee portably. Asserting it for std::vector too is what
+// makes this a check against the standard rather than against one implementation.
+#define STANDARD_REQUIRES_NOEXCEPT(call)     \
+    static_assert(noexcept(sv.call), #call); \
+    static_assert(noexcept(vec.call), #call)
 
 static_assert(std::is_nothrow_default_constructible_v<SvString>);
 static_assert(std::is_nothrow_default_constructible_v<std::vector<std::string>>);
 
-SAME_AS_STD_VECTOR(size());
-SAME_AS_STD_VECTOR(capacity());
-SAME_AS_STD_VECTOR(empty());
-SAME_AS_STD_VECTOR(max_size());
-SAME_AS_STD_VECTOR(data());
-SAME_AS_STD_VECTOR(begin());
-SAME_AS_STD_VECTOR(end());
-SAME_AS_STD_VECTOR(cbegin());
-SAME_AS_STD_VECTOR(cend());
-SAME_AS_STD_VECTOR(rbegin());
-SAME_AS_STD_VECTOR(rend());
-SAME_AS_STD_VECTOR(crbegin());
-SAME_AS_STD_VECTOR(crend());
-SAME_AS_STD_VECTOR(operator[](0));
-SAME_AS_STD_VECTOR(front());
-SAME_AS_STD_VECTOR(back());
-SAME_AS_STD_VECTOR(clear());
-SAME_AS_STD_VECTOR(pop_back());
+STANDARD_REQUIRES_NOEXCEPT(size());
+STANDARD_REQUIRES_NOEXCEPT(capacity());
+STANDARD_REQUIRES_NOEXCEPT(empty());
+STANDARD_REQUIRES_NOEXCEPT(max_size());
+STANDARD_REQUIRES_NOEXCEPT(data());
+STANDARD_REQUIRES_NOEXCEPT(begin());
+STANDARD_REQUIRES_NOEXCEPT(end());
+STANDARD_REQUIRES_NOEXCEPT(cbegin());
+STANDARD_REQUIRES_NOEXCEPT(cend());
+STANDARD_REQUIRES_NOEXCEPT(rbegin());
+STANDARD_REQUIRES_NOEXCEPT(rend());
+STANDARD_REQUIRES_NOEXCEPT(crbegin());
+STANDARD_REQUIRES_NOEXCEPT(crend());
+STANDARD_REQUIRES_NOEXCEPT(clear());
 
-// the two that legitimately can throw: at() checks the index, shrink_to_fit() allocates
-SAME_AS_STD_VECTOR(at(0));
-SAME_AS_STD_VECTOR(shrink_to_fit());
+#undef STANDARD_REQUIRES_NOEXCEPT
 
-#undef SAME_AS_STD_VECTOR
+// Past that the standard leaves it open and the implementations disagree: libstdc++ and the MSVC
+// STL declare pop_back noexcept, libc++ does not. None of them can throw in svector, so these are
+// our own promise and are checked on their own rather than against whichever std::vector we
+// happen to be building with.
+static_assert(noexcept(sv.operator[](0)));
+static_assert(noexcept(sv.front()));
+static_assert(noexcept(sv.back()));
+static_assert(noexcept(sv.pop_back()));
+
+// The two that really can throw. at() reports a bad index, and shrink_to_fit() allocates and lets
+// a failure through instead of quietly doing nothing the way libc++'s vector does.
+static_assert(!noexcept(sv.at(0)));
+static_assert(!noexcept(sv.shrink_to_fit()));
 
 TEST_CASE("noexcept_throwing_move_propagates") {
     // Before the fix this called std::terminate instead of unwinding.
