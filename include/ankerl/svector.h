@@ -928,57 +928,43 @@ public:
         return insert(pos, l.begin(), l.end());
     }
 
-    template< class Operation >
-    constexpr void resize_and_overwrite(size_t count, Operation op) {
-        auto direct = is_direct();
+    /**
+     * @brief Resizes to count elements, letting op initialize the new ones in place.
+     *
+     * Same contract as std::string::resize_and_overwrite, see
+     * https://en.cppreference.com/w/cpp/string/basic_string/resize_and_overwrite
+     *
+     * op is called as op(p, count) with p == data(), and returns the actual new size:
+     *  * p[0, min(count, size())) are the existing elements, readable and assignable.
+     *  * p[min(count, size()), count) is raw uninitialized storage. op has to construct
+     *    every element it wants to keep, e.g. with placement new.
+     *  * op returns r, which must be in [0, count]. Afterwards size() == r, so p[0, r)
+     *    must all be constructed objects when op returns.
+     *
+     * This skips the value-initialization that resize() would do, which is what makes it
+     * faster: for e.g. reading into an svector<char> the zero fill is pure overhead.
+     */
+    template <class Operation>
+    void resize_and_overwrite(size_t count, Operation op) {
+        // step 1: make room. This preserves the existing elements and may switch to indirect mode.
+        reserve(count);
 
-        auto   current_data = data<direction::direct>();
-        size_t current_size = size<direction::direct>();
-        size_t current_capacity = capacity<direction::direct>();
-
-        if (!direct) {
-            current_data = data<direction::indirect>();
-            current_size = size<direction::indirect>();
-            current_capacity = capacity<direction::indirect>();
+        auto const old_size = size();
+        if (count < old_size) {
+            // Shrinking: the tail is gone. Commit the smaller size *before* running op, so that
+            // if op throws, the destructor sees exactly the elements that are still alive.
+            std::destroy_n(data() + count, old_size - count);
+            set_size(count);
         }
 
-        auto new_data = current_data;
+        // step 2: op initializes [min(count, old_size), count) and tells us how much it kept.
+        // The stored size is still min(count, old_size) here, so an exception escaping op
+        // destroys the untouched prefix and leaks only what op itself constructed.
+        auto const new_size = std::move(op)(data(), count);
 
-        if (count <= current_size) {
-            // destroy the trailing elements?
-            std::destroy_n(new_data + count, current_size - count);
-        } else if (count > current_capacity) {
-            // put everything into indirect storage
-            auto new_capacity = calculate_new_capacity(count, current_capacity);
-            auto storage = detail::storage<T>::alloc(new_capacity);
-            // step 1: https://en.cppreference.com/w/cpp/string/basic_string/resize_and_overwrite
-            // count is strictly >= the current size, move the data over to the new allocation
-            uninitialized_move_and_destroy(current_data, storage->data(), current_size);
-
-            if (!direct) { // cleanup if the old storage was indirect
-                auto* storage_direct = indirect();
-                std::destroy_at(storage_direct);
-                ::operator delete(storage_direct);
-            }
-            // treat the newly allocated storage as part of this svector
-            set_indirect(storage);
-            new_data = storage->data();
-
-            // step 2 & 3: perform the target operation and reset the size
-            size_t new_size = op(new_data, current_size);
-            set_size<direction::indirect>(new_size);
-            return;
-        } else {
-            // should be ok to reuse the current data
-        }
-
-        // step 2 & 3: perform the target operation and reset the size
-        size_t new_size = op(new_data, current_size);
-        if (direct) {
-            set_size<direction::direct>(new_size);
-        } else {
-            set_size<direction::indirect>(new_size);
-        }
+        // step 3: commit. new_size <= count <= capacity() is a precondition, so in direct mode
+        // this can never overflow the 7 bit size field.
+        set_size(new_size);
     }
 
     auto erase(const_iterator pos) -> iterator {
