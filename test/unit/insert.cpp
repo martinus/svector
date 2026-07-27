@@ -167,3 +167,53 @@ TEST_CASE("insert_input_iterator") {
 }
 
 // iterator insert(const_iterator pos, std::initializer_list<T> ilist);
+// An empty insert has to leave the container exactly as it was. It used to shift by zero, which
+// self-move-assigned every element from pos onwards and blanked them. See issue #65.
+//
+// std::string is what makes this visible: Counter::Obj's move assignment copies its fields, so a
+// self-move preserves the value and the corruption cannot be observed. See issue #67.
+TEST_CASE("insert_nothing_keeps_the_elements") {
+    // long enough that the string allocates, so a self-move can't be hidden by SSO
+    auto const a = std::string("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+    auto const b = std::string("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+    auto const c = std::string("cccccccccccccccccccccccccccccccccccc");
+    auto const source = std::vector<std::string>{a, b, c};
+
+    for (size_t pos = 0; pos <= 3; ++pos) {
+        auto sv = ankerl::svector<std::string, 4>{a, b, c};
+        auto vec = std::vector<std::string>{a, b, c};
+
+        auto* it_sv = sv.insert(sv.cbegin() + pos, 0, a);
+        auto it_vec = vec.insert(vec.cbegin() + pos, 0, a);
+        REQUIRE(it_sv == sv.begin() + pos); // "or p if n == 0"
+        REQUIRE(it_vec == vec.begin() + pos);
+        assert_eq(vec, sv);
+
+        // forward iterators, empty range
+        sv.insert(sv.cbegin() + pos, source.begin(), source.begin());
+        vec.insert(vec.cbegin() + pos, source.begin(), source.begin());
+        assert_eq(vec, sv);
+
+        // empty initializer list
+        sv.insert(sv.cbegin() + pos, std::initializer_list<std::string>{});
+        vec.insert(vec.cbegin() + pos, std::initializer_list<std::string>{});
+        assert_eq(vec, sv);
+    }
+}
+
+// same thing once the vector is indirect, so both storage modes are covered
+TEST_CASE("insert_nothing_keeps_the_elements_indirect") {
+    auto sv = ankerl::svector<std::string, 4>();
+    auto vec = std::vector<std::string>();
+    for (int i = 0; i < 50; ++i) {
+        auto const s = std::string(40, static_cast<char>('a' + (i % 26)));
+        sv.push_back(s);
+        vec.push_back(s);
+    }
+    // more elements than fit inline, so this one is indirect
+    REQUIRE(sv.size() > ankerl::svector<std::string, 4>().capacity());
+
+    sv.insert(sv.cbegin() + 10, 0, std::string("x"));
+    vec.insert(vec.cbegin() + 10, 0, std::string("x"));
+    assert_eq(vec, sv);
+}
