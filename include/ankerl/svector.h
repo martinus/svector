@@ -559,6 +559,13 @@ class svector {
      * Destroys then empty elements in [source_begin, source_end(
      */
     static void shift_right(T* source_begin, T* source_end, T* target_begin) {
+        if (source_begin == target_begin) {
+            // Shifting by zero. Not just a shortcut: std::move_backward below would be called with
+            // its destination equal to its source end, which it explicitly does not allow, and it
+            // would self-move-assign every element in the range. See issue #65.
+            return;
+        }
+
         // 1. uninitialized moves
         auto const num_moves = std::distance(source_begin, source_end);
         auto const target_end = target_begin + num_moves;
