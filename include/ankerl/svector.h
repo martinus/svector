@@ -497,29 +497,27 @@ class svector {
         set_size(s);
     }
 
-    /**
-     * @brief Whether do_move_assign() can relocate other by copying m_data wholesale. See issue #54.
-     *
-     * Everything that makes up an svector lives inside m_data: in indirect mode just the pointer,
-     * in direct mode the size byte and the elements themselves. So copying the array copies the
-     * whole vector, with no branch on the mode and no loop over the elements.
-     *
-     * Two things have to hold. The elements must survive being relocated bytewise, which is what
-     * trivially copyable buys: byte-relocating e.g. a libstdc++ std::string in its small string
-     * mode leaves its data pointer aimed at other's inline buffer, which dangles as soon as other
-     * is gone.
-     *
-     * And the object has to be small, because the copy always covers the full inline capacity and
-     * not just the used part. Sorting a std::vector of svector<int> holding two elements each:
-     * gcc 16 -O3 gains 31% at 24 bytes, 21% at 72 bytes, but loses 72% at 264; clang 22 gains
-     * 38% / 29% with the same crossover. Filling a std::vector by moving svectors into it is
-     * allocation bound and gains 15% on clang while costing up to 3% on gcc.
-     */
-    static constexpr bool relocate_by_copying_m_data =
-        std::is_trivially_copyable_v<T> && detail::size_of_svector<T>(MinInlineCapacity) <= 128U;
-
     // precondition: all uninitialized
     void do_move_assign(svector&& other) {
+        /**
+         * Everything that makes up an svector lives inside m_data: in indirect mode just the
+         * pointer, in direct mode the size byte and the elements themselves. So copying the array
+         * copies the whole vector, with no branch on the mode and no loop over the elements. See
+         * issue #54.
+         *
+         * Two things have to hold. The elements must survive being relocated bytewise, which is
+         * what trivially copyable buys: byte-relocating e.g. a libstdc++ std::string in its small
+         * string mode leaves its data pointer aimed at other's inline buffer, which dangles as
+         * soon as other is gone.
+         *
+         * And the object has to be small, because the copy always covers the full inline capacity
+         * and not just the used part. Sorting a std::vector of svector<int> holding two elements
+         * each: gcc 16 -O3 gains 31% at 24 bytes, 21% at 72 bytes, but loses 72% at 264; clang 22
+         * gains 38% / 29% with the same crossover. Filling a std::vector by moving svectors into
+         * it is allocation bound and gains 15% on clang while costing up to 3% on gcc.
+         */
+        constexpr auto relocate_by_copying_m_data = std::is_trivially_copyable_v<T> && sizeof(m_data) <= 128U;
+
         if constexpr (relocate_by_copying_m_data) {
             m_data = other.m_data;
         } else if (!other.is_direct()) {

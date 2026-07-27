@@ -34,15 +34,11 @@ public:
         : m_value(other.m_value)
         , m_ptr(&m_value) {}
 
+    // declaring a move constructor already suppresses both assignment operators, which is all the
+    // tests below need: they only ever construct and destroy
     SelfRef(SelfRef&& other) noexcept
         : m_value(other.m_value)
         , m_ptr(&m_value) {}
-
-    // no assignment operators, the tests below only ever construct and destroy
-    auto operator=(SelfRef const&) -> SelfRef& = delete;
-    auto operator=(SelfRef&&) -> SelfRef& = delete;
-
-    ~SelfRef() = default;
 
     // reads through the self pointer, so a byte relocated object reads the source's storage
     [[nodiscard]] auto get() const -> int {
@@ -56,17 +52,16 @@ public:
 
 static_assert(!std::is_trivially_copyable_v<SelfRef>, "otherwise this type tests nothing");
 
-// svector<int, 100> is far bigger than the cutoff below which the whole buffer is copied, so it
-// takes the element by element path even though int is trivially copyable.
-constexpr size_t big_inline_capacity = 100;
-
-} // namespace
-
-TEST_CASE("move_ctor_direct_trivial") {
-    auto a = ankerl::svector<int, 4>{1, 2, 3};
-    REQUIRE(a.capacity() >= a.size()); // still inline
+// Move constructs an inline {1, 2, 3} and checks that the elements arrive. data() has to change:
+// the source was inline, so its elements are relocated into the target's own buffer instead of an
+// allocation changing hands.
+template <typename Vec>
+void check_move_ctor_from_inline() {
+    auto a = Vec{1, 2, 3};
+    auto const* a_data = a.data();
 
     auto b = std::move(a);
+    REQUIRE(b.data() != a_data);
     REQUIRE(b.size() == 3);
     REQUIRE(b[0] == 1);
     REQUIRE(b[1] == 2);
@@ -74,16 +69,17 @@ TEST_CASE("move_ctor_direct_trivial") {
     REQUIRE(a.empty()); // NOLINT(hicpp-invalid-access-moved,bugprone-use-after-move)
 }
 
-TEST_CASE("move_ctor_direct_big_inline_capacity") {
-    // same as above but on the element by element path
-    auto a = ankerl::svector<int, big_inline_capacity>{1, 2, 3};
+} // namespace
 
-    auto b = std::move(a);
-    REQUIRE(b.size() == 3);
-    REQUIRE(b[0] == 1);
-    REQUIRE(b[1] == 2);
-    REQUIRE(b[2] == 3);
-    REQUIRE(a.empty()); // NOLINT(hicpp-invalid-access-moved,bugprone-use-after-move)
+TEST_CASE("move_ctor_direct_trivial") {
+    // small enough that the whole buffer is copied in one go
+    check_move_ctor_from_inline<ankerl::svector<int, 4>>();
+}
+
+TEST_CASE("move_ctor_direct_big_inline_capacity") {
+    // svector<int, 100> is far past the size cutoff, so this takes the element by element path
+    // even though int is trivially copyable
+    check_move_ctor_from_inline<ankerl::svector<int, 100>>();
 }
 
 TEST_CASE("move_ctor_indirect_steals_allocation") {
@@ -133,15 +129,13 @@ TEST_CASE("move_assign_all_four_mode_combinations") {
 }
 
 TEST_CASE("move_self_referencing_element") {
-    // The whole reason moving cannot always be a byte copy of the buffer: SelfRef has to be move
-    // constructed so it can fix up its pointer. A byte copy leaves it aimed at the source's
-    // inline buffer, which is gone as soon as the source is.
+    // SelfRef has to be move constructed so it can fix up its pointer, see above. The source goes
+    // out of scope before the checks, so a byte copy leaves the elements pointing at dead storage.
     auto b = ankerl::svector<SelfRef, 4>();
     {
         auto a = ankerl::svector<SelfRef, 4>();
         a.emplace_back(11);
         a.emplace_back(22);
-        REQUIRE(a.size() <= a.capacity()); // inline, so the elements really are relocated
 
         b = std::move(a);
     }
@@ -164,8 +158,7 @@ TEST_CASE("move_self_referencing_element_ctor") {
 }
 
 TEST_CASE("move_small_strings") {
-    // the real world instance of the above: libstdc++'s std::string keeps its data pointer aimed
-    // at its own internal buffer while the string is short
+    // the real world instance of SelfRef: a short libstdc++ std::string is self referencing too
     auto const short_string = std::string("short"); // no heap allocation
 
     auto b = ankerl::svector<std::string, 4>();
