@@ -1,19 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
 <AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
-	<Type Name="ankerl::v1_0_3::svector&lt;*&gt;">
-		<DisplayString>svector</DisplayString>
+	<!--
+		Visualizer for ankerl::svector in the Visual Studio debugger, see
+		https://learn.microsoft.com/en-us/visualstudio/debugger/create-custom-views-of-native-objects
+
+		The namespace is wildcarded on purpose: svector lives in an inline namespace generated from
+		ANKERL_SVECTOR_VERSION_* (v1_0_3 at the time of writing), so matching it literally would
+		silently stop working on the next version bump.
+
+		alignment_of_t and offset_to_indirect_data are static constexpr members of svector that
+		exist purely for this file, because the debugger cannot evaluate functions.
+	-->
+	<Type Name="ankerl::*::svector&lt;*&gt;">
+		<!-- direct mode: lowest bit of m_data[0] is 1, the size is in the upper 7 bits -->
+		<DisplayString Condition="(m_data[0] &amp; 1) == 1">{{ size={m_data[0] &gt;&gt; 1} direct }}</DisplayString>
+		<!-- indirect mode: lowest bit is 0, m_data holds a pointer to detail::storage<T> -->
+		<DisplayString Condition="(m_data[0] &amp; 1) == 0">{{ size={(*(detail::header**)&amp;m_data)->m_size} indirect }}</DisplayString>
 		<Expand>
-			<!--<Synthetic Name="mode" Condition="(m_data[0] &amp; 1) == 1">
-				<DisplayString>direct mode</DisplayString>
-			</Synthetic>-->
 			<Item Name="size" Condition="(m_data[0] &amp; 1) == 1">m_data[0] &gt;&gt; 1</Item>
 			<ArrayItems Condition="(m_data[0] &amp; 1) == 1">
 				<Size>m_data[0] &gt;&gt; 1</Size>
 				<ValuePointer>(value_type*)((char*)&amp;m_data + alignment_of_t)</ValuePointer>
 			</ArrayItems>
-			<!--<Synthetic Name="mode" Condition="(m_data[0] &amp; 1) == 0">
-				<DisplayString>indirect mode</DisplayString>
-			</Synthetic>-->
 			<Item Name="size" Condition="(m_data[0] &amp; 1) == 0">(*(detail::header**)&amp;m_data)->m_size</Item>
 			<ArrayItems Condition="(m_data[0] &amp; 1) == 0">
 				<Size>(*(detail::header**)&amp;m_data)->m_size</Size>

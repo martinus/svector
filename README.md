@@ -13,6 +13,7 @@
   - [Random Access](#random-access)
   - [Random Insert](#random-insert)
 - [Building \& Testing](#building--testing)
+- [Debugging in Visual Studio](#debugging-in-visual-studio)
 - [Disclaimer](#disclaimer)
 
 `ankerl::svector` is an `std::vector`-like container that can hold some elements on the stack without the need for any allocation.
@@ -114,6 +115,17 @@ meson setup builddir
 cd builddir
 meson test
 ```
+
+## Debugging in Visual Studio
+
+Because `svector` packs size, capacity and data into a single byte array, the Visual Studio debugger shows
+raw bytes instead of the elements. `svector.natvis` fixes this: it displays the size and the contents for
+both direct and indirect mode.
+
+To use it, either add the file to your Visual Studio project, or copy it into
+`%USERPROFILE%\Documents\Visual Studio 2022\Visualizers\` to have it applied to every project.
+See [Create custom views of C++ objects](https://learn.microsoft.com/en-us/visualstudio/debugger/create-custom-views-of-native-objects)
+for details.
 
 ## Disclaimer
 
