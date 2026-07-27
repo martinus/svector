@@ -653,7 +653,7 @@ public:
     using reverse_iterator = std::reverse_iterator<iterator>;
     using const_reverse_iterator = std::reverse_iterator<const_iterator>;
 
-    svector() {
+    svector() noexcept {
         set_direct_and_size(0);
     }
 
@@ -792,28 +792,28 @@ public:
         }
     }
 
-    [[nodiscard]] auto capacity() const -> size_t {
+    [[nodiscard]] auto capacity() const noexcept -> size_t {
         if (is_direct()) {
             return capacity<direction::direct>();
         }
         return capacity<direction::indirect>();
     }
 
-    [[nodiscard]] auto size() const -> size_t {
+    [[nodiscard]] auto size() const noexcept -> size_t {
         if (is_direct()) {
             return size<direction::direct>();
         }
         return size<direction::indirect>();
     }
 
-    [[nodiscard]] auto data() -> T* {
+    [[nodiscard]] auto data() noexcept -> T* {
         if (is_direct()) {
             return direct_data();
         }
         return indirect()->data();
     }
 
-    [[nodiscard]] auto data() const -> T const* {
+    [[nodiscard]] auto data() const noexcept -> T const* {
         return const_cast<svector*>(this)->data(); // NOLINT(cppcoreguidelines-pro-type-const-cast)
     }
 
@@ -850,11 +850,11 @@ public:
         emplace_back(std::move(value));
     }
 
-    [[nodiscard]] auto operator[](size_t idx) const -> T const& {
+    [[nodiscard]] auto operator[](size_t idx) const noexcept -> T const& {
         return *(data() + idx);
     }
 
-    [[nodiscard]] auto operator[](size_t idx) -> T& {
+    [[nodiscard]] auto operator[](size_t idx) noexcept -> T& {
         return *(data() + idx);
     }
 
@@ -869,77 +869,77 @@ public:
         return const_cast<svector*>(this)->at(idx); // NOLINT(cppcoreguidelines-pro-type-const-cast)
     }
 
-    [[nodiscard]] auto begin() const -> T const* {
+    [[nodiscard]] auto begin() const noexcept -> T const* {
         return data();
     }
 
-    [[nodiscard]] auto cbegin() const -> T const* {
+    [[nodiscard]] auto cbegin() const noexcept -> T const* {
         return begin();
     }
 
-    [[nodiscard]] auto begin() -> T* {
+    [[nodiscard]] auto begin() noexcept -> T* {
         return data();
     }
 
-    [[nodiscard]] auto end() -> T* {
+    [[nodiscard]] auto end() noexcept -> T* {
         if (is_direct()) {
             return data<direction::direct>() + size<direction::direct>();
         }
         return data<direction::indirect>() + size<direction::indirect>();
     }
 
-    [[nodiscard]] auto end() const -> T const* {
+    [[nodiscard]] auto end() const noexcept -> T const* {
         return const_cast<svector*>(this)->end(); // NOLINT(cppcoreguidelines-pro-type-const-cast)
     }
 
-    [[nodiscard]] auto cend() const -> T const* {
+    [[nodiscard]] auto cend() const noexcept -> T const* {
         return end();
     }
 
-    [[nodiscard]] auto rbegin() -> reverse_iterator {
+    [[nodiscard]] auto rbegin() noexcept -> reverse_iterator {
         return reverse_iterator{end()};
     }
 
-    [[nodiscard]] auto rbegin() const -> const_reverse_iterator {
+    [[nodiscard]] auto rbegin() const noexcept -> const_reverse_iterator {
         return crbegin();
     }
 
-    [[nodiscard]] auto crbegin() const -> const_reverse_iterator {
+    [[nodiscard]] auto crbegin() const noexcept -> const_reverse_iterator {
         return const_reverse_iterator{end()};
     }
 
-    [[nodiscard]] auto rend() -> reverse_iterator {
+    [[nodiscard]] auto rend() noexcept -> reverse_iterator {
         return reverse_iterator{begin()};
     }
 
-    [[nodiscard]] auto rend() const -> const_reverse_iterator {
+    [[nodiscard]] auto rend() const noexcept -> const_reverse_iterator {
         return crend();
     }
 
-    [[nodiscard]] auto crend() const -> const_reverse_iterator {
+    [[nodiscard]] auto crend() const noexcept -> const_reverse_iterator {
         return const_reverse_iterator{begin()};
     }
 
-    [[nodiscard]] auto front() const -> T const& {
+    [[nodiscard]] auto front() const noexcept -> T const& {
         return *data();
     }
 
-    [[nodiscard]] auto front() -> T& {
+    [[nodiscard]] auto front() noexcept -> T& {
         return *data();
     }
 
-    [[nodiscard]] auto back() -> T& {
+    [[nodiscard]] auto back() noexcept -> T& {
         if (is_direct()) {
             return *(data<direction::direct>() + size<direction::direct>() - 1);
         }
         return *(data<direction::indirect>() + size<direction::indirect>() - 1);
     }
 
-    [[nodiscard]] auto back() const -> T const& {
+    [[nodiscard]] auto back() const noexcept -> T const& {
         return const_cast<svector*>(this)->back(); // NOLINT(cppcoreguidelines-pro-type-const-cast)
     }
 
-    void clear() {
+    void clear() noexcept {
         if constexpr (!std::is_trivially_destructible_v<T>) {
             std::destroy(begin(), end());
         }
@@ -951,11 +951,11 @@ public:
         }
     }
 
-    [[nodiscard]] auto empty() const -> bool {
+    [[nodiscard]] auto empty() const noexcept -> bool {
         return 0U == size();
     }
 
-    void pop_back() {
+    void pop_back() noexcept {
         if (is_direct()) {
             pop_back<direction::direct>();
         } else {
@@ -963,11 +963,13 @@ public:
         }
     }
 
-    [[nodiscard]] static auto max_size() -> size_t {
+    [[nodiscard]] static auto max_size() noexcept -> size_t {
         return (std::numeric_limits<std::ptrdiff_t>::max)();
     }
 
-    void swap(svector& other) {
+    // std::swap does one move construction and two move assignments, so it inherits exactly
+    // the condition those carry
+    void swap(svector& other) noexcept(std::is_nothrow_move_constructible_v<T>) {
         // TODO we could try to do the minimum number of moves
         std::swap(*this, other);
     }
