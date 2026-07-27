@@ -33,6 +33,7 @@ test_sources = [
     'unit/push_back.cpp',
     'unit/reserve.cpp',
     'unit/resize.cpp',
+    'unit/resize_and_overwrite.cpp',
     'unit/reverse_iterators.cpp',
     'unit/round_up.cpp',
     'unit/show_comparison.cpp',
