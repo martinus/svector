@@ -13,7 +13,7 @@ using namespace std::literals;
 
 template <typename Vec, typename... Args>
 void emplace_back(ankerl::nanobench::Bench& bench, size_t num_items, Args&&... args) {
-    bench.batch(num_items).warmup(3).minEpochTime(10ms).run(std::string(name_of_type<Vec>()), [&] {
+    bench.batch(num_items).warmup(3).minEpochTime(100ms).run(std::string(name_of_type<Vec>()), [&] {
         auto vec = Vec();
         for (size_t i = 0; i < num_items; ++i) {
             vec.emplace_back(std::forward<Args>(args)...);
@@ -27,7 +27,6 @@ TEST_CASE("bench_emplace_back_int" * doctest::skip() * doctest::test_suite("benc
     auto num_items = 10000;
     auto bench = ankerl::nanobench::Bench();
     bench.title("emplace_back int");
-    bench.epochs(100);
 
     emplace_back<std::vector<int>>(bench, num_items);
 #if ANKERL_SVECTOR_HAS_ABSL()
@@ -46,7 +45,6 @@ TEST_CASE("bench_emplace_back_string" * doctest::skip() * doctest::test_suite("b
     auto num_items = 10000;
     auto bench = ankerl::nanobench::Bench();
     bench.title("emplace_back");
-    bench.epochs(100);
 
     emplace_back<std::vector<std::string>>(bench, num_items, "hello");
 #if ANKERL_SVECTOR_HAS_ABSL()

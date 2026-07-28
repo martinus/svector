@@ -15,14 +15,11 @@ template <typename Vec>
 void push_back(size_t num_iters, ankerl::nanobench::Bench& bench) {
     auto title = name_of_type<Vec>();
 
-    // determine exact number of push_backs performed
-    auto rng = ankerl::nanobench::Rng(123);
-    auto num_push = size_t();
-    for (size_t i = 0; i < num_iters; ++i) {
-        num_push += rng.bounded(16);
-    }
-
-    bench.batch(num_push).warmup(10).minEpochTime(100ms).unit("push_back").run(std::string(title), [&] {
+    // The batch is what the loop below actually does, one push_back per iteration. It used to be
+    // the sum of num_iters draws of rng.bounded(16), left over from a version that pushed a random
+    // number of elements per iteration, so every ns/push_back ever reported here was about 7.5x
+    // too small.
+    bench.batch(num_iters).warmup(10).minEpochTime(100ms).unit("push_back").run(std::string(title), [&] {
         auto vec = Vec();
         for (size_t i = 0; i < num_iters; ++i) {
             vec.push_back(static_cast<uint8_t>(i));
