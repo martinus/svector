@@ -10,9 +10,11 @@
 - [Design](#design)
 - [Benchmarks](#benchmarks)
   - [How they were run](#how-they-were-run)
+  - [A vector that never allocates](#a-vector-that-never-allocates)
   - [Appending](#appending)
   - [Random access](#random-access)
   - [Inserting in the middle](#inserting-in-the-middle)
+  - [Swapping](#swapping)
   - [Iterating and sorting](#iterating-and-sorting)
   - [All of it in one table](#all-of-it-in-one-table)
 - [Differences from std::vector](#differences-from-stdvector)
@@ -104,7 +106,8 @@ Compared against `std::vector`, `absl::InlinedVector` and `boost::container::sma
 - AMD Ryzen 9 7950X, pinned to one core with `taskset`
 - **one container per process**, 9 processes each, and every number below is the median of those
 - run-to-run spread is under 3% except the `std::string` workloads, which allocate on every iteration and land
-  around 7%. Differences smaller than that are not differences
+  around 7%. Differences smaller than that are not differences, and the tables below only mark a winner where
+  the gap is larger than the spread
 
 That one-container-per-process bit is not fussiness. Benchmarking four containers one after the other inside a
 single process measures the wrong thing as soon as the workload allocates: glibc adapts its mmap threshold the
@@ -127,23 +130,32 @@ meson compile -C builddir
 
 absl and boost join in only if their headers are visible at compile time, see `test/app/boost_absl.h`.
 
+### A vector that never allocates
+
+The case a small vector exists for: it stays inside its inline storage, so it never reaches the allocator.
+
+![benchmark inline](doc/bench_build_inline.png)
+
+Everything with inline storage beats `std::vector` by a wide margin here, because `std::vector` has to
+allocate for the first element and free at the end. Among the three, `svector` is the slowest — it packs its
+size into a byte it shares with the mode flag, so every append unpacks it and packs it back, where absl keeps a
+plain `size_t` next to a plain pointer and pays 8 bytes for the privilege.
+
 ### Appending
 
-Building a vector up from empty, one `uint8_t` at a time.
+Growing past the inline storage, one `uint8_t` at a time.
 
 ![benchmark push_back](doc/bench_push_back.png)
 
 This is where the tagged pointer costs the most. `std::vector` bumps a pointer and compares it against another
-pointer; `svector` first has to work out which mode it is in, then read the size from either a byte or a heap
-header, and it does that on every single append. 19.3 instructions per `push_back` against 8.5, and it ends up
-2.2x behind — level with boost, a little behind absl.
+pointer; `svector` works out which mode it is in, then reads the size from either a byte or a heap header. 15.3
+instructions per `push_back` against 8.5, and it ends up 2.2x behind — level with boost, a shade behind absl.
 
 Give the element some weight and that overhead stops being visible:
 
 ![benchmark emplace_back](doc/bench_emplace_back_string.png)
 
-`svector` is fastest here, though only by 4% over `std::vector` and absl, and it is the smallest object of the
-four while doing it. Boost is the outlier at 30 ns.
+`svector` is fastest of the four here, and the smallest object of the four while doing it.
 
 ### Random access
 
@@ -151,29 +163,39 @@ four while doing it. Boost is the outlier at 30 ns.
 
 ![benchmark operator\[\]](doc/bench_randomaccess.png)
 
-`std::vector` and boost compile the subscript down to a load from a stored pointer, 10.0 instructions per read.
-absl and `svector` have to pick the pointer first: 15.8 and 16.8 instructions. `svector` lands about 18% behind.
-absl gets much closer than its instruction count suggests, because its extra work does not depend on the load and
-overlaps with it.
+`std::vector` and boost compile the subscript to a load from a stored pointer, 10.0 instructions per read. absl
+and `svector` have to pick the pointer first: 15.8 and 16.8. `svector` lands about 18% behind. absl gets closer
+than its instruction count suggests, because its extra work does not depend on the load and overlaps with it.
 
 ### Inserting in the middle
 
-Growing a vector to 1000 elements, each one `emplace`d at a random index, so most of the cost is moving the tail
-out of the way.
+Growing to 1000 elements, each `emplace`d at a random index, so most of the cost is moving the tail out of the way.
 
 ![benchmark random insert](doc/bench_random_insert.png)
 
-For a trivially copyable element the shift is a `memmove`, and `std::vector`, boost and `svector` are within 0.5%
-of each other. absl is 7% back.
+For a trivially copyable element the shift is a `memmove`, and `std::vector`, boost and `svector` are within
+0.5% of each other. absl is 8% back.
 
 ![benchmark random insert std::string](doc/bench_random_insert_string.png)
 
-For `std::string` the three of them stay within a few percent of each other — `svector` measures fastest at 675 ns
-against 721 and 728, but that gap is the same size as the run-to-run spread, so read it as a tie. absl is the
-outlier here, 40% behind the other three.
+For `std::string`, boost, `svector` and `std::vector` are within 13% of each other with a run-to-run spread of
+6%, so read those three as a group; absl is the outlier, 38% to 56% behind them. Always inserting at the *front* instead —
+the worst case for the shift — `svector` is the fastest of the four at 1320 ns against 1415 and 1417, with absl
+again last at 2074.
 
-Always inserting at the *front* instead, the worst case for the shift, `svector` does lose ground: `std::vector`
-1322 ns and boost 1327 are tied at the front, `svector` is 14% back at 1506, and absl trails at 1985.
+### Swapping
+
+![benchmark swap](doc/bench_swap.png)
+
+`std::vector` wins this one by construction and always will: its whole state is three pointers, so a swap is
+three exchanges no matter how many elements it holds. Anything with inline storage has to deal with the
+elements themselves. Among the three that do, `svector` is the fastest.
+
+Element type decides how much that costs. Two vectors of seven `std::string` that each own a heap buffer swap
+in 15.7 ns; seven short strings that live inside themselves take 35.6 ns, because `std::swap` finds
+`std::string::swap`, and for a short string that is three copies of the internal buffer where a longer string
+would have exchanged one pointer. On the short strings absl and boost are within 1% of `svector`; on the heap
+ones absl is 2% behind and boost 9%.
 
 ### Iterating and sorting
 
@@ -185,38 +207,47 @@ Shuffling and sorting 1000 `std::string`:
 
 ![benchmark shuffle and sort](doc/bench_shuffle_sort.png)
 
-Everything except boost is inside the noise of everything else.
+`svector` comes out ahead — 12% on `std::vector`, 5% on absl, 7% on boost — but the run-to-run spread here is
+7%, so only the gap to `std::vector` is bigger than the noise.
 
 ### All of it in one table
 
-ns per operation, median of 9 processes, less is better. **Bold** is the best of the four, and it is only marked
-where the gap is bigger than the run-to-run spread.
+ns per operation, median of 9 processes, less is better. **Bold** is the best of the four, marked only where the
+gap is bigger than the run-to-run spread.
 
 | benchmark                                  | `std::vector` |   `absl` |  `boost` | `ankerl::svector` |
 | ------------------------------------------ | ------------: | -------: | -------: | ----------------: |
-| `push_back` `uint8_t`                       |      **0.30** |     0.52 |     0.67 |              0.67 |
-| `emplace_back` `std::string`                |         23.52 |    23.68 |    30.16 |         **22.51** |
+| build 7 inline, per element                 |          3.85 | **0.48** |     0.92 |              1.26 |
+| `push_back` `uint8_t`                       |      **0.30** |     0.51 |     0.67 |              0.66 |
+| `emplace_back` `std::string`                |         23.52 |    26.13 |    30.54 |         **22.64** |
 | `accumulate` `uint64_t`, per element        |          0.10 |     0.10 |     0.10 |              0.11 |
-| `operator[]` random, per read               |      **0.57** |     0.58 | **0.57** |              0.67 |
-| insert at random index, `uint64_t`          |         17.99 |    19.34 |    18.00 |             18.08 |
-| insert at random index, `std::string`       |         721.3 |   1021.3 |    727.8 |             675.0 |
-| insert at front, `uint64_t`                 |         30.40 |    30.75 |    30.45 |             30.75 |
-| insert at front, `std::string`              |    **1321.6** |   1985.4 | **1327.3** |            1506.4 |
-| shuffle + sort, 1000 `std::string`          |         31935 |    31639 |    35299 |             31181 |
+| `operator[]` random, per read               |          0.57 |     0.58 | **0.56** |              0.67 |
+| insert at random index, `uint64_t`          |         18.01 |    19.43 |    18.06 |             18.06 |
+| insert at random index, `std::string`       |         768.6 |   1061.0 |    681.5 |             721.4 |
+| insert at front, `uint64_t`                 |         30.39 |    30.73 |    30.46 |             30.74 |
+| insert at front, `std::string`              |        1415.2 |   2073.9 |   1416.7 |        **1320.2** |
+| shuffle + sort, 1000 `std::string`          |         35435 |    32905 |    33503 |             31305 |
+| swap, 7 `uint64_t` inline                   |      **1.66** |     3.02 |     2.79 |              2.15 |
+| swap, 7 heap `std::string`                  |      **1.66** |    16.03 |    17.02 |             15.66 |
+| swap, 7 short `std::string`                 |      **1.66** |    35.78 |    35.93 |             35.61 |
 
 Instructions per operation, which have no noise at all:
 
 | benchmark                             | `std::vector` | `absl` | `boost` | `ankerl::svector` |
 | ------------------------------------- | ------------: | -----: | ------: | ----------------: |
-| `push_back` `uint8_t`                  |           8.5 |   17.2 |    14.3 |              19.3 |
+| build 7 inline, per element            |          61.6 |    8.4 |    23.1 |              30.0 |
+| `push_back` `uint8_t`                  |           8.5 |   17.2 |    14.3 |              15.3 |
+| `emplace_back` `std::string`           |          67.7 |  103.1 |   124.2 |              82.8 |
 | `operator[]` random, per read          |          10.0 |   15.8 |    10.0 |              16.8 |
 | insert at random index, `uint64_t`     |         157.2 |  222.8 |   161.8 |             179.4 |
+| swap, 7 `uint64_t` inline              |          10.0 |   41.0 |    89.0 |              33.0 |
 
 The shape of it: `svector` pays for its one byte of overhead on the operations that are *only* container
-bookkeeping — appending and subscripting a trivially copyable type — where it is 18% behind `std::vector` on a
-subscript and 2.2x behind on a `push_back`. As soon as an operation does real work with the elements it is level
-with the alternatives: fastest of the four at `emplace_back`ing strings, tied on inserting and sorting them, and
-14% back on the one worst case, all while being a third the size of the next smallest object.
+bookkeeping with a trivially copyable element — 18% behind `std::vector` on a subscript, 2.2x on a `push_back`,
+and 2.6x behind absl at filling inline storage. As soon as an operation does real work with the elements it is
+level with the alternatives or ahead: fastest of the four at `emplace_back`ing strings and at inserting them at
+the front, fastest of the three inline containers at swapping, and no worse than any of them at sorting — while
+being a third the size of the next smallest object.
 
 ## Differences from std::vector
 
