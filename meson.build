@@ -18,7 +18,7 @@
 #
 
 project('svector', 'cpp',
-    version: '1.0.3',
+    version: '1.1.0',
     license: 'MIT',
     default_options : [
         'cpp_std=c++17',
