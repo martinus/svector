@@ -1,5 +1,5 @@
 // ┌─┐┬  ┬┌─┐┌─┐┌┬┐┌─┐┬─┐   Compact SVO optimized vector C++17 or higher
-// └─┐└┐┌┘├┤ │   │ │ │├┬┘   Version 1.1.0
+// └─┐└┐┌┘├┤ │   │ │ │├┬┘   Version 1.2.0
 // └─┘ └┘ └─┘└─┘ ┴ └─┘┴└─   https://github.com/martinus/svector
 //
 // Licensed under the MIT License <http://opensource.org/licenses/MIT>.
@@ -29,7 +29,7 @@
 
 // see https://semver.org/spec/v2.0.0.html
 #define ANKERL_SVECTOR_VERSION_MAJOR 1 // incompatible API changes
-#define ANKERL_SVECTOR_VERSION_MINOR 1 // add functionality in a backwards compatible manner
+#define ANKERL_SVECTOR_VERSION_MINOR 2 // add functionality in a backwards compatible manner
 #define ANKERL_SVECTOR_VERSION_PATCH 0 // backwards compatible bug fixes
 
 // API versioning with inline namespace, see https://www.foonathan.net/2018/11/inline-namespaces/
