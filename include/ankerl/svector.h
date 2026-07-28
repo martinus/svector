@@ -185,6 +185,42 @@ struct storage : public header {
     }
 };
 
+/**
+ * @brief Destroys [first, last) on the way out, unless it has been released.
+ *
+ * A half built container can normally describe what it has by its size, and then its own destructor
+ * is all the cleanup that is needed. This is for the one place where the constructed part is not a
+ * prefix, so no size can express it.
+ */
+template <typename T>
+class destroy_guard {
+    T* m_first;
+    T* m_last;
+
+public:
+    destroy_guard(T* first, T* last)
+        : m_first(first)
+        , m_last(last) {}
+
+    destroy_guard(destroy_guard const&) = delete;
+    destroy_guard(destroy_guard&&) = delete;
+    auto operator=(destroy_guard const&) -> destroy_guard& = delete;
+    auto operator=(destroy_guard&&) -> destroy_guard& = delete;
+
+    ~destroy_guard() {
+        std::destroy(m_first, m_last);
+    }
+
+    // The guarded range only ever grows to the front, and stays contiguous while it does.
+    void extend_front(T* first) {
+        m_first = first;
+    }
+
+    void release() {
+        m_last = m_first;
+    }
+};
+
 } // namespace detail
 
 template <typename T, size_t MinInlineCapacity>
@@ -566,53 +602,81 @@ class svector {
     }
 
     /**
-     * @brief Shifts data [source_begin, source_end( to the right, starting on target_begin.
+     * @brief How insert_n() puts new elements somewhere: source is a range of count of them.
      *
-     * Preconditions:
-     * * contiguous memory
-     * * source_begin <= target_begin
-     * * source_end onwards is uninitialized memory
-     *
-     * Destroys then empty elements in [source_begin, source_end(
+     * An insert in the middle needs both halves of this. Everything landing past the old end goes
+     * into raw storage and has to be constructed, everything before it lands on an element that is
+     * still there and can be assigned over, which is the whole point: assigning is what keeps a
+     * gap of raw memory from ever existing inside size(). Types like std::string would rather be
+     * assigned to anyway, they can answer it out of the buffer they already hold.
      */
-    static void shift_right(T* source_begin, T* source_end, T* target_begin) {
-        if (source_begin == target_begin) {
-            // Shifting by zero. Not just a shortcut: std::move_backward below would be called with
-            // its destination equal to its source end, which it explicitly does not allow, and it
-            // would self-move-assign every element in the range. See issue #65.
-            return;
+    template <typename It>
+    struct place_range {
+        It source;
+
+        void construct(T* dst, size_t offset, size_t n) const {
+            std::uninitialized_copy_n(std::next(source, static_cast<ptrdiff_t>(offset)), n, dst);
         }
 
-        // 1. uninitialized moves
-        auto const num_moves = std::distance(source_begin, source_end);
-        auto const target_end = target_begin + num_moves;
-        auto const num_uninitialized_move = (std::min)(num_moves, std::distance(source_end, target_end));
-        std::uninitialized_move(source_end - num_uninitialized_move, source_end, target_end - num_uninitialized_move);
-        std::move_backward(source_begin, source_end - num_uninitialized_move, target_end - num_uninitialized_move);
-        std::destroy(source_begin, (std::min)(source_end, target_begin));
+        void assign(T* dst, size_t offset, size_t n) const {
+            std::copy_n(std::next(source, static_cast<ptrdiff_t>(offset)), n, dst);
+        }
+    };
+
+    /**
+     * @brief Same, for count copies of one value.
+     */
+    struct place_copies {
+        T const& value;
+
+        void construct(T* dst, size_t /*offset*/, size_t n) const {
+            std::uninitialized_fill_n(dst, n, value);
+        }
+
+        void assign(T* dst, size_t /*offset*/, size_t n) const {
+            std::fill_n(dst, n, value);
+        }
+    };
+
+    /**
+     * @brief Places a single element by moving it out of source, which the caller owns.
+     */
+    static auto place_moved(T& source) -> place_range<std::move_iterator<T*>> {
+        return {std::make_move_iterator(std::addressof(source))};
     }
 
-    template <direction D>
-    [[nodiscard]] auto make_uninitialized_space_new(size_t s, T* p, size_t count) -> T* {
-        auto target = svector();
-        // we know target is indirect because we're increasing capacity
-        target.reserve(s + count);
-
-        // move everything [begin, pos[
-        auto* target_pos = std::uninitialized_move(data<D>(), p, target.template data<direction::indirect>());
-
-        // move everything [pos, end]
-        std::uninitialized_move(p, data<D>() + s, target_pos + count);
-
-        target.template set_size<direction::indirect>(s + count);
-        *this = std::move(target);
-        return target_pos;
-    }
-
-    template <direction D>
-    [[nodiscard]] auto make_uninitialized_space(T const* pos, size_t count) -> T* {
+    /**
+     * @brief Inserts count elements at pos, taken from place. Returns the first one.
+     *
+     * Invalidates every reference into the container: the elements from pos on are either shifted
+     * right or moved into a fresh allocation. A T const& argument that might be one of our own
+     * elements has to be dealt with first, see is_reference_into_self().
+     *
+     * There is deliberately no point in here where size() counts memory that holds no element.
+     * Opening a hole first and constructing into it afterwards was simpler, but it made the
+     * container undestroyable for as long as the hole lasted, so every constructor that could throw
+     * needed a rollback to close it again -- and getting that rollback right is what issues #68 and
+     * #74 were about. Threading the new elements through the shift instead, the way std::vector
+     * does, removes the hole and the rollback and the whole family of problems with them.
+     *
+     * What that costs is the strong exception guarantee for a partly done insert: an element
+     * assignment throwing part way leaves the container with the right number of elements but no
+     * promise about which. That is what the standard allows for insert, and what std::vector does.
+     * Where nothing has to be shifted over live elements the insert still either happens or does
+     * not: growing builds the result in a separate allocation, and single element inserts go
+     * through emplace(), which builds the element before touching anything.
+     */
+    template <direction D, typename Place>
+    auto insert_n(T const* pos, size_t count, Place const& place) -> T* {
         auto* const p = const_cast<T*>(pos); // NOLINT(cppcoreguidelines-pro-type-const-cast)
-        auto s = size<D>();
+        auto const s = size<D>();
+
+        if (count == 0) {
+            // Not just a shortcut: the shift below would be handed a destination equal to its
+            // source end, which std::move_backward does not allow, and it would self-move-assign
+            // every element it covers. See issue #65.
+            return p;
+        }
 
         // Both written as subtractions so neither can wrap: s <= max_size() and s <= capacity()
         // always hold. It used to say s + count > capacity(), which overflowed for a huge count,
@@ -623,83 +687,67 @@ class svector {
         }
 
         if (count > capacity<D>() - s) {
-            return make_uninitialized_space_new<D>(s, p, count);
+            return insert_n_new<D>(p, s, count, place);
         }
 
-        shift_right(p, data<D>() + s, p + count);
-        set_size<D>(s + count);
-        return p;
-    }
+        auto* const old_end = data<D>() + s;
+        auto const tail = static_cast<size_t>(old_end - p);
 
-    // makes space for uninitialized data of cout elements. Also updates size.
-    //
-    // Invalidates every reference into the container: the elements from pos onwards are either
-    // shifted right or moved into a fresh allocation. A T const& argument that might be one of
-    // our own elements has to be copied out of the way first, see is_reference_into_self().
-    //
-    // size() already counts the gap when this returns, so between here and the caller filling it
-    // the container is claiming raw memory. Whoever constructs into the gap has to call
-    // close_gap() if that throws, see issue #68.
-    [[nodiscard]] auto make_uninitialized_space(T const* pos, size_t count) -> T* {
-        if (is_direct()) {
-            return make_uninitialized_space<direction::direct>(pos, count);
-        }
-        return make_uninitialized_space<direction::indirect>(pos, count);
-    }
-
-    /**
-     * @brief Makes room for count elements at pos and has fill construct them into it.
-     *
-     * fill(p) has to construct all count elements at p, or none: the standard uninitialized_*
-     * algorithms clean up after themselves, and a single placement new either works or builds
-     * nothing. If it throws, the gap is closed again before the exception continues.
-     */
-    template <typename Fill>
-    auto fill_uninitialized_space(T const* pos, size_t count, Fill fill) -> T* {
-        auto* p = make_uninitialized_space(pos, count);
-        try {
-            fill(p);
-        } catch (...) {
-            close_gap(p, count);
-            throw;
-        }
-        return p;
-    }
-
-    /**
-     * @brief Undoes a make_uninitialized_space() whose gap could not be filled.
-     *
-     * Precondition: nothing is constructed in [gap_begin, gap_begin + count). The standard
-     * algorithms used to fill it destroy whatever they managed to build before rethrowing, and a
-     * single placement new either succeeds or constructs nothing.
-     *
-     * Runs while an exception is in flight, so it must not throw itself. When relocating a T
-     * cannot throw we shift the tail back down and end up with exactly the elements we started
-     * with. Otherwise the only safe thing left is to drop the tail, which still leaves a container
-     * that is valid and destroys cleanly, just shorter. std::move_if_noexcept, which is how one
-     * would normally keep the elements of a throwing-move type, is not available here: falling
-     * back to a copy could throw a second exception during unwinding and call std::terminate.
-     */
-    void close_gap(T* gap_begin, size_t count) noexcept {
-        auto* const first = data();
-        auto* const last = first + size();
-        auto* const tail = gap_begin + count;
-
-        if constexpr (std::is_nothrow_move_constructible_v<T> && std::is_nothrow_move_assignable_v<T>) {
-            // Mirror image of shift_right: the destination starts with the raw gap, which has to
-            // be constructed into, and only what lands past it can be assigned.
-            auto const tail_size = static_cast<size_t>(last - tail);
-            auto const num_uninitialized_move = (std::min)(count, tail_size);
-            std::uninitialized_move_n(tail, num_uninitialized_move, gap_begin);
-            std::move(tail + num_uninitialized_move, last, gap_begin + num_uninitialized_move);
-
-            // whatever the shift did not overwrite is moved-from but still alive
-            std::destroy((std::max)(gap_begin + tail_size, tail), last);
-            set_size(size() - count);
+        if (tail > count) {
+            // The tail is long enough that shifting it right stays within the old elements plus
+            // the count raw slots behind them, so all the new elements land on live ones.
+            std::uninitialized_move(old_end - count, old_end, old_end);
+            set_size<D>(s + count);
+            std::move_backward(p, old_end - count, old_end);
+            place.assign(p, 0, count);
         } else {
-            std::destroy(tail, last);
-            set_size(static_cast<size_t>(gap_begin - first));
+            // The tail clears the ground it stood on, so the new elements behind the old end have
+            // nothing under them and are built instead.
+            place.construct(old_end, tail, count - tail);
+            set_size<D>(s + count - tail);
+            std::uninitialized_move(p, old_end, p + count);
+            set_size<D>(s + count);
+            place.assign(p, 0, tail);
         }
+        return p;
+    }
+
+    /**
+     * @brief insert_n() for when the elements no longer fit. Builds the result in fresh storage.
+     */
+    template <direction D, typename Place>
+    auto insert_n_new(T* p, size_t s, size_t count, Place const& place) -> T* {
+        auto target = svector();
+        target.reserve(s + count); // we know target is indirect because we're increasing capacity
+
+        auto* const dst = target.template data<direction::indirect>();
+        auto* const gap = dst + (p - data<D>());
+
+        // The new elements before ours: nothing of ours has moved yet if this throws, so the insert
+        // simply has not happened, and place can still read the elements we hold.
+        place.construct(gap, 0, count);
+
+        // What is built now is the gap but nothing in front of it, and no size can say that, so for
+        // as long as the hole lasts the cleanup is spelled out here. Leaving it to target's
+        // destructor, which sees a size of zero, is what leaked the relocated elements in issue
+        // #74. Both moves below destroy whatever they managed to build themselves.
+        auto guard = detail::destroy_guard<T>(gap, gap + count);
+        std::uninitialized_move(data<D>(), p, dst);
+        guard.extend_front(dst);
+        std::uninitialized_move(p, data<D>() + s, gap + count);
+        guard.release();
+
+        target.template set_size<direction::indirect>(s + count);
+        *this = std::move(target);
+        return gap;
+    }
+
+    template <typename Place>
+    auto insert_n(T const* pos, size_t count, Place const& place) -> T* {
+        if (is_direct()) {
+            return insert_n<direction::direct>(pos, count, place);
+        }
+        return insert_n<direction::indirect>(pos, count, place);
     }
 
     void destroy() {
@@ -1097,45 +1145,30 @@ public:
         // dangling. Build the element first. Inserting in the middle already moves every
         // element after pos, so one extra move does not change the cost.
         auto tmp = T(std::forward<Args>(args)...);
-        return fill_uninitialized_space(pos, 1, [&](T* p) {
-            new (static_cast<void*>(p)) T(std::move(tmp));
-        });
+        return insert_n(pos, 1, place_moved(tmp));
     }
 
+    // Both of these build the element before anything is shifted, which is what emplace() does, so
+    // they go there. It costs one move, and it is what makes a single element insert either happen
+    // or not happen at all: the copy is the only part that can throw, and by the time anything has
+    // been touched it is already done. It also means value is allowed to be one of our own
+    // elements, without a copy to get it out of the way first.
     auto insert(const_iterator pos, T const& value) -> iterator {
-        if (is_reference_into_self(value)) {
-            // making space moves our elements around, so value has to be copied out of the
-            // way first. v.insert(v.begin(), v[0])
-            auto const tmp = value;
-            return insert(pos, tmp);
-        }
-        // not aliasing, so we can make space first and construct straight into it. Going
-        // through emplace() would build a temporary and then move it, for no reason.
-        return fill_uninitialized_space(pos, 1, [&](T* p) {
-            new (static_cast<void*>(p)) T(value);
-        });
+        return emplace(pos, value);
     }
 
     auto insert(const_iterator pos, T&& value) -> iterator {
-        if (is_reference_into_self(value)) {
-            auto tmp = std::move(value);
-            return insert(pos, std::move(tmp));
-        }
-        return fill_uninitialized_space(pos, 1, [&](T* p) {
-            new (static_cast<void*>(p)) T(std::move(value));
-        });
+        return emplace(pos, std::move(value));
     }
 
     auto insert(const_iterator pos, size_t count, T const& value) -> iterator {
         if (is_reference_into_self(value)) {
-            // making space moves our elements around, so value has to be copied out of the
-            // way first. v.insert(v.begin(), 1000, v[0])
+            // the shift moves our elements around and assigns over them, so value has to be
+            // copied out of the way first. v.insert(v.begin(), 1000, v[0])
             auto const tmp = value;
             return insert(pos, count, tmp);
         }
-        return fill_uninitialized_space(pos, count, [&](T* p) {
-            std::uninitialized_fill_n(p, count, value);
-        });
+        return insert_n(pos, count, place_copies{value});
     }
 
     template <typename It>
@@ -1161,9 +1194,7 @@ public:
     template <typename It>
     auto insert(const_iterator pos, It first, It last, std::forward_iterator_tag /*unused*/) -> iterator {
         auto const count = static_cast<size_t>(std::distance(first, last));
-        return fill_uninitialized_space(pos, count, [&](T* p) {
-            std::uninitialized_copy(first, last, p);
-        });
+        return insert_n(pos, count, place_range<It>{first});
     }
 
     template <typename InputIt, typename = detail::enable_if_t<detail::is_input_iterator<InputIt>>>
