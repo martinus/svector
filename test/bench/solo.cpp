@@ -146,6 +146,49 @@ void insert_random(char const* name) {
     });
 }
 
+// Exchanging two vectors that both hold their elements inline. std::vector always swaps two
+// pointers; a small vector has to deal with the elements themselves.
+template <typename Vec>
+void swap_inline(char const* name) {
+    auto a = Vec();
+    auto b = Vec();
+    for (size_t i = 0; i < 7; ++i) {
+        if constexpr (std::is_same_v<typename Vec::value_type, std::string>) {
+            a.emplace_back("hello");
+            b.emplace_back("world");
+        } else {
+            a.emplace_back(i);
+            b.emplace_back(i + 100);
+        }
+    }
+    bench(name).unit("swap").run([&] {
+        a.swap(b);
+        ankerl::nanobench::doNotOptimizeAway(a.data());
+    });
+}
+
+// The case a small vector exists for: it never outgrows its inline storage, so it never allocates.
+//
+// The elements are read back and the sum is what leaves the loop. Handing out only data() and
+// size() is not enough to keep the work alive: with a trivially destructible element and nothing
+// reading it, the optimizer deletes an inline vector entirely, and the benchmark then measures how
+// much each implementation can be deleted.
+template <typename Vec>
+void build_inline(char const* name) {
+    auto rng = ankerl::nanobench::Rng(123);
+    bench(name).batch(7).unit("element").run([&] {
+        auto vec = Vec();
+        for (size_t i = 0; i < 7; ++i) {
+            vec.emplace_back(static_cast<uint8_t>(rng()));
+        }
+        auto sum = uint64_t();
+        for (auto const& v : vec) {
+            sum += v;
+        }
+        ankerl::nanobench::doNotOptimizeAway(sum);
+    });
+}
+
 // Same but always at the front, the worst case for the shift.
 template <typename Vec>
 void insert_front(char const* name) {
@@ -194,7 +237,10 @@ char const* const g_workloads[] = {"push_back",
                                    "insert_random_int",
                                    "insert_random_string",
                                    "insert_front_int",
-                                   "insert_front_string"};
+                                   "insert_front_string",
+                                   "swap_string",
+                                   "swap_int",
+                                   "build_inline"};
 
 char const* const g_containers[] = {"std::vector", "absl", "boost", "ankerl::svector"};
 
@@ -246,6 +292,21 @@ auto run(char const* workload, int container, char const* name) -> bool {
         pick<std::vector<std::string>, AbslVec<std::string, 7>, BoostVec<std::string, 7>, ankerl::svector<std::string, 7>>(
             container, [&](auto t) {
                 insert_front<typename decltype(t)::type>(name);
+            });
+    } else if (is("swap_string")) {
+        pick<std::vector<std::string>, AbslVec<std::string, 7>, BoostVec<std::string, 7>, ankerl::svector<std::string, 7>>(
+            container, [&](auto t) {
+                swap_inline<typename decltype(t)::type>(name);
+            });
+    } else if (is("swap_int")) {
+        pick<std::vector<uint64_t>, AbslVec<uint64_t, 7>, BoostVec<uint64_t, 7>, ankerl::svector<uint64_t, 7>>(
+            container, [&](auto t) {
+                swap_inline<typename decltype(t)::type>(name);
+            });
+    } else if (is("build_inline")) {
+        pick<std::vector<uint8_t>, AbslVec<uint8_t, 7>, BoostVec<uint8_t, 7>, ankerl::svector<uint8_t, 7>>(
+            container, [&](auto t) {
+                build_inline<typename decltype(t)::type>(name);
             });
     } else {
         return false;
