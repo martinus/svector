@@ -68,7 +68,7 @@ CHARTS = [
 ]
 
 # measured but not charted, they go in the README's table
-EXTRA = ["accumulate", "insert_front_int", "insert_front_string"]
+EXTRA = ["accumulate", "insert_front_int", "insert_front_string", "swap_string", "swap_int", "build_inline"]
 
 
 def measure(binary, workload, container, runs, cpu):
