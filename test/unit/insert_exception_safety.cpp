@@ -8,8 +8,9 @@
 // get wrong: whatever throws, and whenever, it finds a container that is a container.
 //
 // What that is worth differs by path, and these tests pin down which is which:
-//  * growing builds the result in a separate allocation, so a throw leaves the original alone
-//  * a single element is built by emplace() before anything moves, same thing
+//  * growing builds the result in a separate allocation, so a failed copy leaves the original
+//    alone -- though a failed move cannot, it has already emptied what it was reading
+//  * a single element is built by emplace() before anything moves, so that one is all or nothing
 //  * an in place insert of several has to assign the new values over elements that are still
 //    there, and once one of those fails there is no way back. All that is left then is the basic
 //    guarantee, which is also all the standard asks of std::vector: the container is valid, and
@@ -29,21 +30,31 @@
 
 namespace {
 
+// The types below all fail the same way: every operation that can throw spends from one budget, and
+// the throw lands on the operation that finds it empty. Only one of them is ever in play at a time,
+// so a single counter says everything four of them would.
+int budget = 0; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
+
+void tick(char const* what) {
+    if (--budget < 0) {
+        throw std::runtime_error(what);
+    }
+}
+
+// never runs out, for setting up a container before the interesting part
+constexpr auto unlimited = 1000000;
+
 // Copying throws once the budget runs out, moving never does. This is the ordinary case: a type
 // whose copy can fail because it allocates, like std::string.
 struct ThrowOnCopy {
     std::string value;
-
-    static int budget; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 
     explicit ThrowOnCopy(std::string v)
         : value(std::move(v)) {}
 
     ThrowOnCopy(ThrowOnCopy const& other)
         : value(other.value) {
-        if (--budget < 0) {
-            throw std::runtime_error("copy");
-        }
+        tick("copy");
     }
 
     ThrowOnCopy(ThrowOnCopy&&) noexcept = default;
@@ -51,48 +62,34 @@ struct ThrowOnCopy {
     // an insert copies a new element either way, into a raw slot or over a live one, so the budget
     // has to cover both or half the paths through insert_n() never see a failure
     auto operator=(ThrowOnCopy const& other) -> ThrowOnCopy& {
-        if (--budget < 0) {
-            throw std::runtime_error("copy assign");
-        }
+        tick("copy assign");
         value = other.value;
         return *this;
     }
 
     auto operator=(ThrowOnCopy&&) noexcept -> ThrowOnCopy& = default;
     ~ThrowOnCopy() = default;
-
-    auto operator==(ThrowOnCopy const& other) const -> bool {
-        return value == other.value;
-    }
 };
-
-int ThrowOnCopy::budget = 0; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 
 static_assert(std::is_nothrow_move_constructible_v<ThrowOnCopy>);
 static_assert(std::is_nothrow_move_assignable_v<ThrowOnCopy>);
 
 // Same, but relocating it can throw too. That used to mean the tail could not be shifted back and
-// was dropped instead; now the new elements are built before anything moves, so this type gets the
-// same rollback as the one above.
+// was dropped instead. Nothing about the insert depends on what the move constructor promises any
+// more, so this type is treated exactly like the one above.
 struct ThrowOnCopyAndMove {
     std::string value;
-
-    static int budget; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 
     explicit ThrowOnCopyAndMove(std::string v)
         : value(std::move(v)) {}
 
     ThrowOnCopyAndMove(ThrowOnCopyAndMove const& other)
         : value(other.value) {
-        if (--budget < 0) {
-            throw std::runtime_error("copy");
-        }
+        tick("copy");
     }
 
     auto operator=(ThrowOnCopyAndMove const& other) -> ThrowOnCopyAndMove& {
-        if (--budget < 0) {
-            throw std::runtime_error("copy assign");
-        }
+        tick("copy assign");
         value = other.value;
         return *this;
     }
@@ -109,16 +106,12 @@ struct ThrowOnCopyAndMove {
     ~ThrowOnCopyAndMove() = default;
 };
 
-int ThrowOnCopyAndMove::budget = 0; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
-
 static_assert(!std::is_nothrow_move_constructible_v<ThrowOnCopyAndMove>);
 
 // Moving throws once the budget runs out. Only reachable while growing, where the elements have to
 // be relocated into the new storage, and the one case that can leave us short of a full rollback.
 struct ThrowOnMove {
     std::string value;
-
-    static int budget; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 
     explicit ThrowOnMove(std::string v)
         : value(std::move(v)) {}
@@ -128,9 +121,7 @@ struct ThrowOnMove {
     // NOLINTNEXTLINE(performance-noexcept-move-constructor)
     ThrowOnMove(ThrowOnMove&& other)
         : value(std::move(other.value)) {
-        if (--budget < 0) {
-            throw std::runtime_error("move");
-        }
+        tick("move");
     }
 
     auto operator=(ThrowOnMove const&) -> ThrowOnMove& = default;
@@ -142,13 +133,9 @@ struct ThrowOnMove {
     ~ThrowOnMove() = default;
 };
 
-int ThrowOnMove::budget = 0; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
-
-// Assigning throws once the budget runs out, which is what the rotation into place does.
+// Assigning throws once the budget runs out, which is what shifting the tail right does.
 struct ThrowOnMoveAssign {
     std::string value;
-
-    static int budget; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 
     explicit ThrowOnMoveAssign(std::string v)
         : value(std::move(v)) {}
@@ -159,16 +146,12 @@ struct ThrowOnMoveAssign {
 
     // NOLINTNEXTLINE(performance-noexcept-move-constructor)
     auto operator=(ThrowOnMoveAssign&& other) -> ThrowOnMoveAssign& {
-        if (--budget < 0) {
-            throw std::runtime_error("move assign");
-        }
+        tick("move assign");
         value = std::move(other.value);
         return *this;
     }
     ~ThrowOnMoveAssign() = default;
 };
-
-int ThrowOnMoveAssign::budget = 0; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 
 template <typename V>
 auto make(size_t count) -> V {
@@ -191,17 +174,32 @@ auto contents(V const& v) -> std::vector<std::string> {
 using SvCopy = ankerl::svector<ThrowOnCopy, 4>;
 
 /**
- * @brief Checks what a failed insert at pos still has to be, in every case.
+ * @brief Runs an insert of count elements at pos that has to throw, and checks what is left.
  *
- * Nothing in front of pos is ever read or written by an insert, so it has to come out exactly as
- * it went in, and everything from pos on has to at least be readable -- which is asan's business
- * rather than the comparison's. The count is either the old one or the full new one: the new
- * elements are counted in one step each, never half way through one.
+ * grows says the insert had to reallocate, and then the answer is simple: it was built in an
+ * allocation of its own which is just dropped again, so nothing happened at all.
+ *
+ * In place there is no way back once an assignment over a live element has failed, and what is
+ * promised is only this. Nothing in front of pos is ever read or written by an insert, so it comes
+ * out exactly as it went in. Everything from pos on has to at least be readable, which is asan's
+ * business rather than the comparison's. And the count is either the old one or the full new one:
+ * the new elements are counted in one step each, never half way through one.
  */
-void require_valid_after_throw(std::vector<std::string> const& before,
-                               std::vector<std::string> const& after,
-                               size_t pos,
-                               size_t count) {
+template <typename Vec, typename Insert>
+void require_throws_and_stays_valid(Vec& v, size_t pos, size_t count, int throw_at, Insert insert) {
+    auto const before = contents(v);
+    auto const grows = count > v.capacity() - v.size();
+
+    budget = throw_at;
+    REQUIRE_THROWS_AS(insert(v), std::runtime_error);
+    budget = unlimited;
+
+    auto const after = contents(v);
+    if (grows) {
+        REQUIRE(after == before);
+        return;
+    }
+
     REQUIRE((after.size() == before.size() || after.size() == before.size() + count));
     REQUIRE(after.size() >= pos);
     for (size_t i = 0; i < pos; ++i) {
@@ -223,21 +221,11 @@ TEST_CASE("insert_count_throwing_copy_keeps_container_valid") {
             for (size_t count = 1; count <= 5; ++count) {
                 // every copy the insert makes is a place the failure can land, and which of them
                 // are into raw slots and which onto live ones depends on all three loops
-                for (size_t throw_at = 0; throw_at < count; ++throw_at) {
+                for (int throw_at = 0; throw_at < static_cast<int>(count); ++throw_at) {
                     auto v = make<SvCopy>(size);
-                    auto const before = contents(v);
-                    auto const grows = count > v.capacity() - v.size();
-
-                    ThrowOnCopy::budget = static_cast<int>(throw_at);
-                    REQUIRE_THROWS_AS(v.insert(v.cbegin() + pos, count, filler), std::runtime_error);
-                    ThrowOnCopy::budget = 1000000;
-
-                    if (grows) {
-                        // built in an allocation of its own, which is simply dropped again
-                        REQUIRE(contents(v) == before);
-                    } else {
-                        require_valid_after_throw(before, contents(v), pos, count);
-                    }
+                    require_throws_and_stays_valid(v, pos, count, throw_at, [&](SvCopy& c) {
+                        c.insert(c.cbegin() + pos, count, filler);
+                    });
                 }
             }
         }
@@ -253,20 +241,11 @@ TEST_CASE("insert_range_throwing_copy_keeps_container_valid") {
 
     for (size_t size = 0; size <= 9; ++size) {
         for (size_t pos = 0; pos <= size; ++pos) {
-            for (size_t throw_at = 0; throw_at < source.size(); ++throw_at) {
+            for (int throw_at = 0; throw_at < static_cast<int>(source.size()); ++throw_at) {
                 auto v = make<SvCopy>(size);
-                auto const before = contents(v);
-                auto const grows = source.size() > v.capacity() - v.size();
-
-                ThrowOnCopy::budget = static_cast<int>(throw_at);
-                REQUIRE_THROWS_AS(v.insert(v.cbegin() + pos, source.begin(), source.end()), std::runtime_error);
-                ThrowOnCopy::budget = 1000000;
-
-                if (grows) {
-                    REQUIRE(contents(v) == before);
-                } else {
-                    require_valid_after_throw(before, contents(v), pos, source.size());
-                }
+                require_throws_and_stays_valid(v, pos, source.size(), throw_at, [&](SvCopy& c) {
+                    c.insert(c.cbegin() + pos, source.begin(), source.end());
+                });
             }
         }
     }
@@ -283,9 +262,9 @@ TEST_CASE("insert_single_throwing_copy_keeps_container_intact") {
             auto v = make<SvCopy>(size);
             auto const before = contents(v);
 
-            ThrowOnCopy::budget = 0;
+            budget = 0;
             REQUIRE_THROWS_AS(v.insert(v.cbegin() + pos, filler), std::runtime_error);
-            ThrowOnCopy::budget = 1000000;
+            budget = unlimited;
 
             REQUIRE(contents(v) == before);
         }
@@ -300,9 +279,9 @@ TEST_CASE("emplace_throwing_copy_keeps_container_intact") {
             auto v = make<SvCopy>(size);
             auto const before = contents(v);
 
-            ThrowOnCopy::budget = 0;
+            budget = 0;
             REQUIRE_THROWS_AS(v.emplace(v.cbegin() + pos, filler), std::runtime_error);
-            ThrowOnCopy::budget = 1000000;
+            budget = unlimited;
 
             REQUIRE(contents(v) == before);
         }
@@ -319,21 +298,13 @@ TEST_CASE("insert_throwing_copy_of_a_throwing_move_type_keeps_container_valid") 
     for (size_t size = 0; size <= 9; ++size) {
         for (size_t pos = 0; pos <= size; ++pos) {
             for (size_t count = 1; count <= 3; ++count) {
-                ThrowOnCopyAndMove::budget = 1000000;
+                budget = unlimited;
                 auto v = make<Vec>(size);
-                auto const before = contents(v);
                 auto const filler = ThrowOnCopyAndMove(std::string(40, 'z'));
-                auto const grows = count > v.capacity() - v.size();
 
-                ThrowOnCopyAndMove::budget = 0;
-                REQUIRE_THROWS_AS(v.insert(v.cbegin() + pos, count, filler), std::runtime_error);
-                ThrowOnCopyAndMove::budget = 1000000;
-
-                if (grows) {
-                    REQUIRE(contents(v) == before);
-                } else {
-                    require_valid_after_throw(before, contents(v), pos, count);
-                }
+                require_throws_and_stays_valid(v, pos, count, 0, [&](Vec& c) {
+                    c.insert(c.cbegin() + pos, count, filler);
+                });
             }
         }
     }
@@ -348,7 +319,7 @@ TEST_CASE("insert_throwing_move_while_growing_does_not_leak") {
 
     // filled to the brim, so the insert below has no choice but to grow
     auto make_full = [](size_t at_least) {
-        ThrowOnMove::budget = 1000000;
+        budget = unlimited;
         auto v = make<Vec>(at_least);
         while (v.size() < v.capacity()) {
             v.emplace_back(std::string(40, 'q'));
@@ -362,13 +333,13 @@ TEST_CASE("insert_throwing_move_while_growing_does_not_leak") {
             // relocating is exactly one move per element, and every one of them is a place the
             // throw can land: while the front is still a hole, while the tail is going over, and
             // everywhere in between
-            for (size_t budget = 0; budget < full; ++budget) {
+            for (size_t spend = 0; spend < full; ++spend) {
                 auto v = make_full(at_least);
                 auto const filler = ThrowOnMove(std::string(40, 'z'));
 
-                ThrowOnMove::budget = static_cast<int>(budget);
+                budget = static_cast<int>(spend);
                 REQUIRE_THROWS_AS(v.insert(v.cbegin() + pos, filler), std::runtime_error);
-                ThrowOnMove::budget = 1000000;
+                budget = unlimited;
 
                 // we never got far enough to adopt the new storage, so our own elements are still
                 // ours and still all there. Some have been moved from, so the count is all that
@@ -379,36 +350,36 @@ TEST_CASE("insert_throwing_move_while_growing_does_not_leak") {
     }
 }
 
-// The rotation into place is the one step that assigns, so it is the one step a throwing move
+// Shifting the tail right is the one step that move assigns, so it is the one step a throwing move
 // assignment can interrupt. Everything it touches is a live object either way, so the container
 // stays valid and destructible, just with the elements in an order nobody promised.
 TEST_CASE("insert_throwing_move_assign_leaves_a_valid_container") {
     using Vec = ankerl::svector<ThrowOnMoveAssign, 8>;
     auto num_throws = 0;
 
-    // one short of the inline capacity, so the insert stays in place and does rotate
+    // inside the inline capacity, so the insert stays in place and does shift
     for (size_t size = 1; size <= 7; ++size) {
         for (size_t pos = 0; pos < size; ++pos) {
-            // how many assignments a rotation takes is std::rotate's business, so sweep past it
-            for (size_t budget = 0; budget <= size + 1; ++budget) {
-                ThrowOnMoveAssign::budget = 1000000;
+            // the number of assignments depends on where pos falls, so sweep past the end of it
+            for (size_t spend = 0; spend <= size + 1; ++spend) {
+                budget = unlimited;
                 auto v = make<Vec>(size);
                 auto const filler = ThrowOnMoveAssign(std::string(40, 'z'));
 
-                ThrowOnMoveAssign::budget = static_cast<int>(budget);
+                budget = static_cast<int>(spend);
                 try {
                     v.insert(v.cbegin() + pos, filler);
                 } catch (std::runtime_error const&) {
                     ++num_throws;
                 }
-                ThrowOnMoveAssign::budget = 1000000;
+                budget = unlimited;
 
-                // the new element was built and counted before the rotation started, so it is
-                // part of the container whether or not it ever reached pos
+                // the tail is moved out to its new place and counted before anything is assigned,
+                // so the element is part of the container whether or not it ever reached pos
                 REQUIRE(v.size() == size + 1);
 
                 // reading every one of them is the actual check, asan is what answers it. Their
-                // values are whatever a half done rotation left, and a moved from string can be
+                // values are whatever a half done shift left, and a moved from string can be
                 // anything valid, so there is nothing to compare against.
                 for (auto const& e : v) {
                     REQUIRE(e.value.size() <= 40);
