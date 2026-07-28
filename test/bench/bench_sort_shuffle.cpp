@@ -31,7 +31,10 @@ void sort_shuffle(size_t num_items) {
         ankerl::nanobench::Rng(123).shuffle(vec); // create a new RNG to ensure we shuffle deterministically
         std::sort(vec.begin(), vec.end());
         if constexpr (std::is_same_v<typename Vec::value_type, std::string>) {
-            REQUIRE(vec.front() == "10000017441998304507");
+            // the lexicographically smallest of the 1000 generated numbers, which is not the same
+            // one as the numerically smallest below. The value this used to check was never any of
+            // them, so the string half of this benchmark has never run.
+            REQUIRE(vec.front() == "10028905880159877647");
         } else {
             REQUIRE(vec.front() == 5239234720771008);
         }

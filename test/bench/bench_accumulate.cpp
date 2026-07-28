@@ -20,7 +20,7 @@ void accumulate_numeric(size_t num_items, ankerl::nanobench::Bench& bench) {
         vec.emplace_back(rng());
     }
 
-    bench.batch(num_items).unit("element").warmup(3).minEpochTime(10ms).run(std::string(name_of_type<Vec>()), [&] {
+    bench.batch(num_items).unit("element").warmup(3).minEpochTime(100ms).run(std::string(name_of_type<Vec>()), [&] {
         auto ret = std::accumulate(vec.begin(), vec.end(), uint64_t());
         REQUIRE(ret == 1576219068393533883);
     });
@@ -31,7 +31,6 @@ TEST_CASE("bench_accumulate_numeric" * doctest::skip() * doctest::test_suite("be
     auto num_items = 100;
     auto bench = ankerl::nanobench::Bench();
     bench.title("accumulate");
-    bench.epochs(100);
 
     accumulate_numeric<std::vector<uint64_t>>(num_items, bench);
 #if ANKERL_SVECTOR_HAS_ABSL()

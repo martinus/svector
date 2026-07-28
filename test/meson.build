@@ -90,6 +90,17 @@ benchmark(
     args: ['-ns', '-ts=bench'],
     verbose: true)
 
+# One workload against one container per process, which is the only way to compare four allocating
+# containers without the allocator's warm-up state deciding the winner. See test/bench/solo.cpp.
+# Not registered as a benchmark(): it takes arguments and is driven by scripts/bench/render_charts.py.
+executable(
+    'bench-solo',
+    ['bench/solo.cpp', 'app/nanobench.cpp'],
+    include_directories: incdir,
+    cpp_args: cpp_args,
+    dependencies: [dependency('threads')],
+)
+
 test(
     'svector test',
     test_exe,

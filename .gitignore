@@ -6,3 +6,6 @@ builddir
 # ignore all in subprojects except the .wrap files
 /subprojects/*
 !/subprojects/*.wrap
+
+# nanobench writes these next to wherever the benchmarks are run from
+bench_*.html

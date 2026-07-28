@@ -18,9 +18,16 @@ constexpr auto name_of_type() -> std::string_view {
     // idea from https://github.com/TheLartians/StaticTypeInfo/blob/master/include/static_type_info/type_name.h
     auto for_double = name_of_type_raw<double>();
     auto n_before = for_double.find("double"sv);
-    auto n_after = for_double.size() - (n_before + "double"sv.size());
 
     auto str = name_of_type_raw<T>();
+    if (n_before == std::string_view::npos) {
+        // Not a signature we know how to trim, so hand back all of it. Unreachable in practice, but
+        // saying so is what keeps gcc 16 from warning that remove_prefix(npos) would run off the
+        // front, which it turns into an error in a -O3 -Werror build.
+        return str;
+    }
+    auto n_after = for_double.size() - (n_before + "double"sv.size());
+
     str.remove_prefix(n_before);
     str.remove_suffix(n_after);
     return str;
