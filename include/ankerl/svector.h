@@ -287,6 +287,17 @@ class svector {
         return const_cast<svector*>(this)->indirect(); // NOLINT(cppcoreguidelines-pro-type-const-cast)
     }
 
+    /**
+     * @brief set_indirect() without the low bit check, for a pointer already known to be one.
+     *
+     * set_indirect() re-reads the byte it just wrote to make sure the mode came out right. Where
+     * the pointer was just taken off a live indirect svector that is answering a question we have
+     * already answered, and it is 4 of the 29 instructions of an indirect swap.
+     */
+    void set_indirect_unchecked(detail::storage<T>* ptr) {
+        std::memcpy(m_data.data(), &ptr, sizeof(ptr));
+    }
+
     void set_indirect(detail::storage<T>* ptr) {
         std::memcpy(m_data.data(), &ptr, sizeof(ptr));
 
@@ -763,6 +774,11 @@ class svector {
      *
      * Exchanges as far as both of them reach, then hands the remainder of the longer one over.
      */
+    // uninitialized_move_and_destroy() is the obvious helper for the tail below and is the wrong
+    // choice: its memcpy specialisation for a trivially copyable T becomes an out of line call,
+    // which loses to the loop the compiler inlines here. Measured on svector<uint64_t, 40>, which
+    // is trivially copyable and too big for the whole buffer path, so it lands right here: the
+    // helper is 70 instructions against 157, and 8.93 ns against 5.69.
     void swap_direct(svector& other) {
         auto const s = direct_size();
         auto const other_s = other.direct_size();
@@ -1171,10 +1187,16 @@ public:
      * @brief Exchanges the contents with other.
      *
      * std::swap(*this, other) would do it in three whole container moves, and in direct mode a
-     * container move is every element moved and the original destroyed. Swapping two
-     * svector<std::string, 7> that way costs 607 instructions where exchanging the elements
-     * costs about 50, and two indirect svectors need not touch a single element -- the two
-     * pointers are the entire state.
+     * container move is every element moved and the original destroyed. Two indirect svectors need
+     * not touch an element at all, and a mixed pair only has to relocate the inline side.
+     *
+     * Measured against the three move version, gcc 16 -O3, inline capacity 7, ns per swap:
+     * two heap std::string 22.9 -> 15.5, unequal sizes 23.0 -> 16.6, uint64_t 2.9 -> 2.3,
+     * indirect 1.7 -> 1.3, mixed 15.0 -> 11.3. One case is worse: two equal length runs of short
+     * strings, 28.5 -> 34.8, because std::swap_ranges finds std::string::swap, and for a string
+     * small enough to live inside itself that is three copies of the internal buffer where a
+     * relocation would have been one. That is libstdc++'s trade, not one this can pick around, and
+     * it buys the other six.
      *
      * The condition is what the work below actually needs: relocating between the two inline
      * buffers is a move construction, and exchanging elements in place is a swap.
@@ -1190,8 +1212,8 @@ public:
         if (!is_dir && !other_is_dir) {
             // both on the heap, so nothing but the two pointers moves
             auto* const mine = indirect();
-            set_indirect(other.indirect());
-            other.set_indirect(mine);
+            set_indirect_unchecked(other.indirect());
+            other.set_indirect_unchecked(mine);
         } else if constexpr (relocate_by_copying_m_data) {
             // m_data is the whole of an svector whichever mode it is in, so for a T that can be
             // relocated by copying bytes this exchanges everything at once, and vectorizes

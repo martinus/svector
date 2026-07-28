@@ -148,14 +148,18 @@ void insert_random(char const* name) {
 
 // Exchanging two vectors that both hold their elements inline. std::vector always swaps two
 // pointers; a small vector has to deal with the elements themselves.
-template <typename Vec>
+//
+// Both string lengths are here on purpose. A string short enough to live inside itself and one
+// that owns a buffer are swapped by completely different code in libstdc++, and svector comes out
+// on opposite sides of std::swap(a, b) for the two: see the note on svector::swap().
+template <typename Vec, bool LongStrings = false>
 void swap_inline(char const* name) {
     auto a = Vec();
     auto b = Vec();
     for (size_t i = 0; i < 7; ++i) {
         if constexpr (std::is_same_v<typename Vec::value_type, std::string>) {
-            a.emplace_back("hello");
-            b.emplace_back("world");
+            a.emplace_back(LongStrings ? std::string(40, 'a') : std::string("hello"));
+            b.emplace_back(LongStrings ? std::string(40, 'b') : std::string("world"));
         } else {
             a.emplace_back(i);
             b.emplace_back(i + 100);
@@ -239,6 +243,7 @@ char const* const g_workloads[] = {"push_back",
                                    "insert_front_int",
                                    "insert_front_string",
                                    "swap_string",
+                                   "swap_string_long",
                                    "swap_int",
                                    "build_inline"};
 
@@ -297,6 +302,11 @@ auto run(char const* workload, int container, char const* name) -> bool {
         pick<std::vector<std::string>, AbslVec<std::string, 7>, BoostVec<std::string, 7>, ankerl::svector<std::string, 7>>(
             container, [&](auto t) {
                 swap_inline<typename decltype(t)::type>(name);
+            });
+    } else if (is("swap_string_long")) {
+        pick<std::vector<std::string>, AbslVec<std::string, 7>, BoostVec<std::string, 7>, ankerl::svector<std::string, 7>>(
+            container, [&](auto t) {
+                swap_inline<typename decltype(t)::type, true>(name);
             });
     } else if (is("swap_int")) {
         pick<std::vector<uint64_t>, AbslVec<uint64_t, 7>, BoostVec<uint64_t, 7>, ankerl::svector<uint64_t, 7>>(

@@ -47,6 +47,9 @@ CONTAINERS = [
 
 # workload, png, title, subtitle, x label, scale applied to ns
 CHARTS = [
+    ("build_inline", "bench_build_inline.png", "a vector that never allocates",
+     "build 7 uint8_t from runtime values and read them back, inline capacity 7",
+     "ns per element  (less is better)", 1.0),
     ("push_back", "bench_push_back.png", "push_back",
      "push_back 1000 uint8_t onto a fresh vector, inline capacity 7",
      "ns per push_back  (less is better)", 1.0),
@@ -62,13 +65,16 @@ CHARTS = [
     ("insert_random_string", "bench_random_insert_string.png", "insert at a random position",
      "grow to 1000 std::string, each emplace()d at a random index, inline capacity 7",
      "ns per insert  (less is better)", 1.0),
+    ("swap_int", "bench_swap.png", "swap",
+     "exchange two vectors of 7 uint64_t, both held inline",
+     "ns per swap  (less is better)", 1.0),
     ("shuffle_sort", "bench_shuffle_sort.png", "shuffle + sort",
      "shuffle and then std::sort 1000 std::string, inline capacity 7",
      "µs per shuffle+sort  (less is better)", 1 / 1000.0),
 ]
 
 # measured but not charted, they go in the README's table
-EXTRA = ["accumulate", "insert_front_int", "insert_front_string", "swap_string", "swap_int", "build_inline"]
+EXTRA = ["accumulate", "insert_front_int", "insert_front_string", "swap_string", "swap_string_long"]
 
 
 def measure(binary, workload, container, runs, cpu):

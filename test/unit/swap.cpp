@@ -66,71 +66,6 @@ TEST_CASE("swap_svector") {
     test_swap<ankerl::svector<Counter::Obj, 2>>();
 }
 
-// swap() has a case for each combination of the two modes rather than going through three whole
-// container moves, so every combination needs to be walked, in both size orders. Counter::Obj is
-// not trivially copyable, so this is the element by element path.
-TEST_CASE("swap_every_mode_combination") {
-    Counter counts;
-    using Vec = ankerl::svector<Counter::Obj, 4>;
-    auto const n = Vec().capacity(); // above this the elements move to the heap
-    REQUIRE(n >= 2);
-
-    for (size_t sa = 0; sa <= n * 2; ++sa) {
-        for (size_t sb = 0; sb <= n * 2; ++sb) {
-            auto a = Vec();
-            auto b = Vec();
-            for (size_t i = 0; i < sa; ++i) {
-                a.emplace_back(i, counts);
-            }
-            for (size_t i = 0; i < sb; ++i) {
-                b.emplace_back(1000 + i, counts);
-            }
-
-            a.swap(b);
-
-            REQUIRE(a.size() == sb);
-            REQUIRE(b.size() == sa);
-            for (size_t i = 0; i < sb; ++i) {
-                REQUIRE(a[i].get() == 1000 + i);
-            }
-            for (size_t i = 0; i < sa; ++i) {
-                REQUIRE(b[i].get() == i);
-            }
-        }
-    }
-}
-
-// Trivially copyable elements take the whole buffer at once instead, so they need the same walk.
-TEST_CASE("swap_every_mode_combination_trivial") {
-    using Vec = ankerl::svector<int, 4>;
-    auto const n = Vec().capacity();
-
-    for (size_t sa = 0; sa <= n * 2; ++sa) {
-        for (size_t sb = 0; sb <= n * 2; ++sb) {
-            auto a = Vec();
-            auto b = Vec();
-            for (size_t i = 0; i < sa; ++i) {
-                a.emplace_back(static_cast<int>(i));
-            }
-            for (size_t i = 0; i < sb; ++i) {
-                b.emplace_back(static_cast<int>(1000 + i));
-            }
-
-            // through std::swap, which finds the free function by argument dependent lookup
-            std::swap(a, b);
-
-            REQUIRE(a.size() == sb);
-            REQUIRE(b.size() == sa);
-            for (size_t i = 0; i < sb; ++i) {
-                REQUIRE(a[i] == static_cast<int>(1000 + i));
-            }
-            for (size_t i = 0; i < sa; ++i) {
-                REQUIRE(b[i] == static_cast<int>(i));
-            }
-        }
-    }
-}
-
 namespace {
 
 // One byte, and not trivially copyable, so it takes the element by element path and its inline
@@ -140,8 +75,8 @@ namespace {
 struct Tiny {
     uint8_t value;
 
-    explicit Tiny(uint8_t v)
-        : value(v) {}
+    explicit Tiny(size_t v)
+        : value(static_cast<uint8_t>(v)) {}
     Tiny(Tiny const& other) // NOLINT(modernize-use-equals-default)
         : value(other.value) {}
     auto operator=(Tiny const& other) -> Tiny& { // NOLINT(modernize-use-equals-default,cert-oop54-cpp)
@@ -154,45 +89,102 @@ struct Tiny {
 static_assert(!std::is_trivially_copyable_v<Tiny>);
 static_assert(alignof(Tiny) < sizeof(void*));
 
-} // namespace
+/**
+ * @brief Swaps every combination of the two modes, in both size orders.
+ *
+ * swap() has a case per mode combination rather than one path, so each element type has to walk
+ * all of them. Sizes run past the inline capacity on both sides, which covers direct/direct,
+ * direct/indirect, indirect/direct and indirect/indirect, and the two orders of each.
+ *
+ * Calls the member. A qualified std::swap(a, b) would not reach it -- name lookup does not consider
+ * ankerl::swap for a qualified call -- so it would quietly test the generic three move template
+ * instead, which is what happened to an earlier version of this test.
+ */
+template <typename Vec, typename Make, typename Get>
+void test_all_mode_combinations(Make make, Get get) {
+    auto const n = Vec().capacity(); // above this the elements move to the heap
+    REQUIRE(n >= 2);
 
-TEST_CASE("swap_mixed_modes_when_elements_overlap_the_pointer") {
-    using Vec = ankerl::svector<Tiny, 1>;
-    auto const n = Vec().capacity();
-    REQUIRE(n > 1);
+    for (size_t sa = 0; sa <= n * 2; ++sa) {
+        for (size_t sb = 0; sb <= n * 2; ++sb) {
+            auto a = Vec();
+            auto b = Vec();
+            for (size_t i = 0; i < sa; ++i) {
+                a.emplace_back(make(i));
+            }
+            for (size_t i = 0; i < sb; ++i) {
+                b.emplace_back(make(100 + i));
+            }
 
-    // one side stays inline, the other is on the heap, in both orders
-    for (size_t direct_size = 0; direct_size <= n; ++direct_size) {
-        for (size_t indirect_size = n + 1; indirect_size <= n + 4; ++indirect_size) {
-            for (auto const direct_first : {true, false}) {
-                auto small = Vec();
-                auto big = Vec();
-                for (size_t i = 0; i < direct_size; ++i) {
-                    small.emplace_back(static_cast<uint8_t>(i));
-                }
-                for (size_t i = 0; i < indirect_size; ++i) {
-                    big.emplace_back(static_cast<uint8_t>(100 + i));
-                }
-                REQUIRE(small.size() == direct_size);
-                REQUIRE(big.size() == indirect_size);
+            a.swap(b);
 
-                if (direct_first) {
-                    small.swap(big);
-                } else {
-                    big.swap(small);
-                }
-
-                REQUIRE(small.size() == indirect_size);
-                REQUIRE(big.size() == direct_size);
-                for (size_t i = 0; i < indirect_size; ++i) {
-                    REQUIRE(small[i].value == static_cast<uint8_t>(100 + i));
-                }
-                for (size_t i = 0; i < direct_size; ++i) {
-                    REQUIRE(big[i].value == static_cast<uint8_t>(i));
-                }
+            REQUIRE(a.size() == sb);
+            REQUIRE(b.size() == sa);
+            for (size_t i = 0; i < sb; ++i) {
+                REQUIRE(get(a[i]) == 100 + i);
+            }
+            for (size_t i = 0; i < sa; ++i) {
+                REQUIRE(get(b[i]) == i);
             }
         }
     }
+}
+
+} // namespace
+
+// Not trivially copyable, so element by element.
+TEST_CASE("swap_every_mode_combination") {
+    Counter counts;
+    test_all_mode_combinations<ankerl::svector<Counter::Obj, 4>>(
+        [&](size_t i) {
+            return Counter::Obj(i, counts);
+        },
+        [](Counter::Obj const& o) {
+            return o.get();
+        });
+}
+
+// Trivially copyable, so the whole inline buffer goes at once.
+TEST_CASE("swap_every_mode_combination_trivial") {
+    test_all_mode_combinations<ankerl::svector<size_t, 4>>(
+        [](size_t i) {
+            return i;
+        },
+        [](size_t v) {
+            return v;
+        });
+}
+
+// Inline storage overlapping the bytes the indirect pointer lives in.
+TEST_CASE("swap_every_mode_combination_overlapping_pointer") {
+    test_all_mode_combinations<ankerl::svector<Tiny, 1>>(
+        [](size_t i) {
+            return Tiny(i);
+        },
+        [](Tiny const& t) {
+            return size_t{t.value};
+        });
+}
+
+// The free swap() only earns its keep if an unqualified call finds it, which is the form every
+// standard algorithm uses internally. Exchanging elements in place move assigns them; three
+// container moves only ever move construct. So a non-zero moveAssign is proof the member ran.
+TEST_CASE("unqualified_swap_finds_the_member") {
+    Counter counts;
+    auto a = ankerl::svector<Counter::Obj, 4>();
+    auto b = ankerl::svector<Counter::Obj, 4>();
+    for (size_t i = 0; i < 3; ++i) {
+        a.emplace_back(i, counts);
+        b.emplace_back(100 + i, counts);
+    }
+    REQUIRE(counts.moveAssign == 0);
+
+    using std::swap;
+    swap(a, b); // unqualified, so argument dependent lookup reaches ankerl::swap
+
+    REQUIRE(counts.moveAssign > 0);
+    REQUIRE(a[0].get() == 100);
+    REQUIRE(b[0].get() == 0);
 }
 
 TEST_CASE("swap_with_itself_does_nothing") {
