@@ -188,9 +188,9 @@ struct storage : public header {
 /**
  * @brief Destroys [first, last) on the way out, unless it has been released.
  *
- * A half built container can normally describe what it has by its size, and then its own destructor
- * is all the cleanup that is needed. This is for the one place where the constructed part is not a
- * prefix, so no size can express it.
+ * Half built storage can normally say what it holds with a size, and then a destructor is all the
+ * cleanup anyone needs. This is for the one place where the built part is not a prefix, so no size
+ * can express it. Deleting the copy is what keeps it from being handed around and destroying twice.
  */
 template <typename T>
 class destroy_guard {
@@ -203,9 +203,7 @@ public:
         , m_last(last) {}
 
     destroy_guard(destroy_guard const&) = delete;
-    destroy_guard(destroy_guard&&) = delete;
     auto operator=(destroy_guard const&) -> destroy_guard& = delete;
-    auto operator=(destroy_guard&&) -> destroy_guard& = delete;
 
     ~destroy_guard() {
         std::destroy(m_first, m_last);
@@ -307,9 +305,14 @@ class svector {
     /**
      * @brief True when value is one of our own elements, e.g. from v.push_back(v[0]).
      *
-     * Growing or shifting moves those elements around and destroys the originals, so anything
-     * that takes a T const& has to copy it out of the way first. Compared as uintptr_t because
-     * relational operators on pointers into different objects are not specified.
+     * Growing or shifting moves those elements around and assigns over them, so a caller taking a
+     * T const& has to get it out of the way before that starts. There are two ways to do that and
+     * only one of them needs this: either copy value to the stack first, which is what the callers
+     * below do, or build the new element before touching anything, which is what emplace() does.
+     * insert(pos, value) takes the second route, which is why it does not ask.
+     *
+     * Compared as uintptr_t because relational operators on pointers into different objects are
+     * not specified.
      */
     [[nodiscard]] auto is_reference_into_self(T const& value) const -> bool {
         auto const p = reinterpret_cast<uintptr_t>(std::addressof(value));
@@ -602,13 +605,10 @@ class svector {
     }
 
     /**
-     * @brief How insert_n() puts new elements somewhere: source is a range of count of them.
+     * @brief Where insert_n() gets its new elements from: source is a range of count of them.
      *
-     * An insert in the middle needs both halves of this. Everything landing past the old end goes
-     * into raw storage and has to be constructed, everything before it lands on an element that is
-     * still there and can be assigned over, which is the whole point: assigning is what keeps a
-     * gap of raw memory from ever existing inside size(). Types like std::string would rather be
-     * assigned to anyway, they can answer it out of the buffer they already hold.
+     * construct() builds n of them, starting at the offset'th, into raw storage. assign() puts the
+     * first n onto elements that are already there. An insert needs both, see insert_n().
      */
     template <typename It>
     struct place_range {
@@ -618,8 +618,8 @@ class svector {
             std::uninitialized_copy_n(std::next(source, static_cast<ptrdiff_t>(offset)), n, dst);
         }
 
-        void assign(T* dst, size_t offset, size_t n) const {
-            std::copy_n(std::next(source, static_cast<ptrdiff_t>(offset)), n, dst);
+        void assign(T* dst, size_t n) const {
+            std::copy_n(source, n, dst);
         }
     };
 
@@ -633,14 +633,11 @@ class svector {
             std::uninitialized_fill_n(dst, n, value);
         }
 
-        void assign(T* dst, size_t /*offset*/, size_t n) const {
+        void assign(T* dst, size_t n) const {
             std::fill_n(dst, n, value);
         }
     };
 
-    /**
-     * @brief Places a single element by moving it out of source, which the caller owns.
-     */
     static auto place_moved(T& source) -> place_range<std::move_iterator<T*>> {
         return {std::make_move_iterator(std::addressof(source))};
     }
@@ -652,19 +649,21 @@ class svector {
      * right or moved into a fresh allocation. A T const& argument that might be one of our own
      * elements has to be dealt with first, see is_reference_into_self().
      *
-     * There is deliberately no point in here where size() counts memory that holds no element.
-     * Opening a hole first and constructing into it afterwards was simpler, but it made the
-     * container undestroyable for as long as the hole lasted, so every constructor that could throw
-     * needed a rollback to close it again -- and getting that rollback right is what issues #68 and
-     * #74 were about. Threading the new elements through the shift instead, the way std::vector
-     * does, removes the hole and the rollback and the whole family of problems with them.
+     * There is deliberately no point in here where size() counts memory that holds no element. What
+     * lands past the old end is constructed, what lands on an element that is still there is
+     * assigned over it, and size() only ever grows by a step that has already happened. Opening a
+     * hole and constructing into it afterwards was simpler, but it left the container undestroyable
+     * for as long as the hole lasted, so every constructor that could throw needed a rollback to
+     * close it again -- and getting that rollback right is what issues #68 and #74 were about.
      *
-     * What that costs is the strong exception guarantee for a partly done insert: an element
-     * assignment throwing part way leaves the container with the right number of elements but no
-     * promise about which. That is what the standard allows for insert, and what std::vector does.
-     * Where nothing has to be shifted over live elements the insert still either happens or does
-     * not: growing builds the result in a separate allocation, and single element inserts go
-     * through emplace(), which builds the element before touching anything.
+     * What it costs is the strong exception guarantee for an insert that has to assign over live
+     * elements: failing part way leaves the container with the right number of elements but no
+     * promise about which, and only the part before pos is certain to be untouched. That is what
+     * the standard asks of insert, and what std::vector does. The paths that assign over nothing
+     * are unaffected: growing builds the result in an allocation of its own, and a single element
+     * goes through emplace(), which builds it before anything is touched. Growing is all or nothing
+     * only as far as relocating a T is: a move constructor that throws part way through leaves our
+     * own elements moved from, and then all that is left is that nothing leaks.
      */
     template <direction D, typename Place>
     auto insert_n(T const* pos, size_t count, Place const& place) -> T* {
@@ -672,9 +671,9 @@ class svector {
         auto const s = size<D>();
 
         if (count == 0) {
-            // Not just a shortcut: the shift below would be handed a destination equal to its
-            // source end, which std::move_backward does not allow, and it would self-move-assign
-            // every element it covers. See issue #65.
+            // Not just a shortcut: the std::move_backward below would be handed a destination equal
+            // to its source end, which it does not allow, and it would self-move-assign every
+            // element it covers. See issue #65.
             return p;
         }
 
@@ -687,7 +686,7 @@ class svector {
         }
 
         if (count > capacity<D>() - s) {
-            return insert_n_new<D>(p, s, count, place);
+            return insert_n_new<D>(p, count, place);
         }
 
         auto* const old_end = data<D>() + s;
@@ -699,7 +698,7 @@ class svector {
             std::uninitialized_move(old_end - count, old_end, old_end);
             set_size<D>(s + count);
             std::move_backward(p, old_end - count, old_end);
-            place.assign(p, 0, count);
+            place.assign(p, count);
         } else {
             // The tail clears the ground it stood on, so the new elements behind the old end have
             // nothing under them and are built instead.
@@ -707,7 +706,7 @@ class svector {
             set_size<D>(s + count - tail);
             std::uninitialized_move(p, old_end, p + count);
             set_size<D>(s + count);
-            place.assign(p, 0, tail);
+            place.assign(p, tail);
         }
         return p;
     }
@@ -716,7 +715,8 @@ class svector {
      * @brief insert_n() for when the elements no longer fit. Builds the result in fresh storage.
      */
     template <direction D, typename Place>
-    auto insert_n_new(T* p, size_t s, size_t count, Place const& place) -> T* {
+    auto insert_n_new(T* p, size_t count, Place const& place) -> T* {
+        auto const s = size<D>();
         auto target = svector();
         target.reserve(s + count); // we know target is indirect because we're increasing capacity
 
@@ -1148,11 +1148,8 @@ public:
         return insert_n(pos, 1, place_moved(tmp));
     }
 
-    // Both of these build the element before anything is shifted, which is what emplace() does, so
-    // they go there. It costs one move, and it is what makes a single element insert either happen
-    // or not happen at all: the copy is the only part that can throw, and by the time anything has
-    // been touched it is already done. It also means value is allowed to be one of our own
-    // elements, without a copy to get it out of the way first.
+    // Both of these want the element built before anything is shifted, which is what emplace()
+    // does, so they go there rather than say it again. See insert_n() for what that buys.
     auto insert(const_iterator pos, T const& value) -> iterator {
         return emplace(pos, value);
     }

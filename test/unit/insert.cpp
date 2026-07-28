@@ -216,9 +216,9 @@ TEST_CASE("insert_nothing_keeps_the_elements_indirect") {
     assert_eq(vec, sv);
 }
 
-// make_uninitialized_space() decided whether the elements still fit with "s + count >
-// capacity()". A huge count wrapped that sum around to something small, so the check said yes and
-// the in place shift wrote past the end of the buffer. See issue #69.
+// insert_n() decides whether the elements still fit. It used to ask "s + count > capacity()", and a
+// huge count wrapped that sum around to something small, so the check said yes and the in place
+// shift wrote past the end of the buffer. See issue #69.
 TEST_CASE("insert_count_too_large_throws") {
     auto const huge = (std::numeric_limits<size_t>::max)();
 
