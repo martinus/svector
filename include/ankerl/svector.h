@@ -226,11 +226,6 @@ class svector {
     static_assert(MinInlineCapacity <= 127, "sorry, can't have more than 127 direct elements");
     static constexpr auto N = detail::automatic_capacity<T>(MinInlineCapacity);
 
-    // Only used by svector.natvis: the Visual Studio debugger can't evaluate functions, so it needs
-    // these offsets as data. Keep in sync with direct_data() and detail::storage<T>::offset_to_data.
-    static constexpr auto alignment_of_t = std::alignment_of_v<T>;
-    static constexpr auto offset_to_indirect_data = detail::round_up(sizeof(detail::header), alignment_of_t);
-
     enum class direction { direct, indirect };
 
     /**
