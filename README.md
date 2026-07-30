@@ -19,7 +19,6 @@
   - [All of it in one table](#all-of-it-in-one-table)
 - [Differences from std::vector](#differences-from-stdvector)
 - [Building \& Testing](#building--testing)
-- [Debugging in Visual Studio](#debugging-in-visual-studio)
 - [Status](#status)
 
 `ankerl::svector` is an `std::vector`-like container that keeps a few elements inline, without allocating.
@@ -297,17 +296,6 @@ meson test -C builddir --benchmark
 # See test/bench/solo.cpp for why.
 ./scripts/bench/render_charts.py builddir/test/bench-solo doc --runs 9
 ```
-
-## Debugging in Visual Studio
-
-Because `svector` packs size, capacity and data into a single byte array, the Visual Studio debugger shows
-raw bytes instead of the elements. `svector.natvis` fixes this: it displays the size and the contents for
-both direct and indirect mode.
-
-To use it, either add the file to your Visual Studio project, or copy it into
-`%USERPROFILE%\Documents\Visual Studio 2022\Visualizers\` to have it applied to every project.
-See [Create custom views of C++ objects](https://learn.microsoft.com/en-us/visualstudio/debugger/create-custom-views-of-native-objects)
-for details.
 
 ## Status
 
