@@ -38,6 +38,21 @@
 #define ANKERL_SVECTOR_NAMESPACE \
     ANKERL_SVECTOR_VERSION_CONCAT(ANKERL_SVECTOR_VERSION_MAJOR, ANKERL_SVECTOR_VERSION_MINOR, ANKERL_SVECTOR_VERSION_PATCH)
 
+/**
+ * @brief Keeps a function out of line even where a compiler would rather inline it.
+ *
+ * Only used for commit_grow(), where being shared between callers is the whole point, see
+ * insert_n(). Silently nothing on a compiler that has no such spelling: then the inlining is back
+ * and so is the code size, but nothing is wrong.
+ */
+#if defined(__GNUC__) || defined(__clang__)
+#    define ANKERL_SVECTOR_NOINLINE __attribute__((noinline))
+#elif defined(_MSC_VER)
+#    define ANKERL_SVECTOR_NOINLINE __declspec(noinline)
+#else
+#    define ANKERL_SVECTOR_NOINLINE
+#endif
+
 #include <algorithm>
 #include <array>
 #include <cstddef>
@@ -216,6 +231,41 @@ public:
 
     void release() {
         m_last = m_first;
+    }
+};
+
+/**
+ * @brief Deallocates storage on the way out, unless it has been released.
+ *
+ * For the window in which an allocation exists but no svector holds it yet, which is where an
+ * insert that has to grow runs the caller's constructors. Deleting the copy is what keeps it from
+ * being handed around and freeing twice.
+ */
+template <typename T>
+class storage_guard {
+    storage<T>* m_storage;
+
+public:
+    explicit storage_guard(storage<T>* s)
+        : m_storage(s) {}
+
+    storage_guard(storage_guard const&) = delete;
+    auto operator=(storage_guard const&) -> storage_guard& = delete;
+
+    ~storage_guard() {
+        if (m_storage != nullptr) {
+            storage<T>::dealloc(m_storage);
+        }
+    }
+
+    [[nodiscard]] auto get() const -> storage<T>* {
+        return m_storage;
+    }
+
+    auto release() -> storage<T>* {
+        auto* s = m_storage;
+        m_storage = nullptr;
+        return s;
     }
 };
 
@@ -663,6 +713,18 @@ class svector {
      * right or moved into a fresh allocation. A T const& argument that might be one of our own
      * elements has to be dealt with first, see is_reference_into_self().
      *
+     * Only the shift below is per (direction, placer) pair; growing goes through commit_grow(),
+     * which knows nothing about the placer and is one function for all of them. The whole body used
+     * to be per pair, and four near identical copies of the growth path is what made each additional
+     * insert form cost about 8 KB where it had been 2.8 KB. See issue #79.
+     *
+     * The shift is deliberately not shared as well, and that is the trade the issue is about: as a
+     * function of its own it is small enough that gcc inlines it straight back, and clang, which
+     * does not, pays for it. Sharing it costs a compile time count on the paths where there is one
+     * -- 100 x 1000 emplace(begin()) on svector<int> spends 12.7% more instructions when a one
+     * element relocation the compiler was unrolling becomes a call to memmove with a runtime length.
+     * The growth path has no such constant to lose, which is why the seam sits where it does.
+     *
      * There is deliberately no point in here where size() counts memory that holds no element. What
      * lands past the old end is constructed, what lands on an element that is still there is
      * assigned over it, and size() only ever grows by a step that has already happened. Opening a
@@ -726,34 +788,64 @@ class svector {
     }
 
     /**
+     * @brief The other half of insert_n_new(): relocates our elements around the new ones and
+     *        adopts the storage they were built in. Returns the first of them.
+     *
+     * Deliberately out of line. This is the bulky part of an insert and the cold one, and having it
+     * exist once instead of once per (direction, placer) pair is most of what splitting insert_n()
+     * up buys -- gcc inlines it back into every caller otherwise. See issue #79.
+     *
+     * What that costs is one call per reallocation, about 28 instructions, and it is the only thing
+     * about the split that costs anything: without the attribute a growth-only workload measures
+     * within 0.05% of the code this replaces, with it svector<int> pays 1.8%. Only a T that
+     * relocates by memcpy is fast enough for a fixed 28 to show up at all; for std::string the same
+     * workload is unchanged. That is the trade for ~2 KB per insert form.
+     */
+    template <direction D>
+    ANKERL_SVECTOR_NOINLINE auto commit_grow(T* p, size_t count, detail::storage_guard<T>& fresh) -> T* {
+        auto const s = size<D>();
+        auto* const old_data = data<D>();
+        auto* const dst = fresh.get()->data();
+        auto* const gap = dst + (p - old_data);
+
+        // What is built now is the gap but nothing in front of it, and no size can say that, so for
+        // as long as the hole lasts the cleanup is spelled out here. Leaving it to the destructor of
+        // a container that sees a size of zero is what leaked the relocated elements in issue #74.
+        // Both moves below destroy whatever they managed to build themselves.
+        auto guard = detail::destroy_guard<T>(gap, gap + count);
+        std::uninitialized_move(old_data, p, dst);
+        guard.extend_front(dst);
+        std::uninitialized_move(p, old_data + s, gap + count);
+        guard.release();
+
+        // Nothing below throws, so this is where the new storage stops being the guard's.
+        auto* const storage = fresh.release();
+        storage->size(s + count);
+        destroy(); // our elements are all moved from now, and the old allocation can go
+        set_indirect(storage);
+        return gap;
+    }
+
+    /**
      * @brief insert_n() for when the elements no longer fit. Builds the result in fresh storage.
+     *
+     * The allocation is the guard's until commit_grow() takes it: place.construct() is where the
+     * caller's constructors run, nothing of ours has moved yet at that point, so an exception there
+     * means the insert simply has not happened and the storage has to go back.
      */
     template <direction D, typename Place>
     auto insert_n_new(T* p, size_t count, Place const& place) -> T* {
         auto const s = size<D>();
-        auto target = svector();
-        target.reserve(s + count); // we know target is indirect because we're increasing capacity
 
-        auto* const dst = target.template data<direction::indirect>();
-        auto* const gap = dst + (p - data<D>());
+        // the capacity reserve(s + count) on an empty svector would pick, which is where this used
+        // to start before it built the result itself
+        auto fresh = detail::storage_guard<T>(detail::storage<T>::alloc(calculate_new_capacity(s + count, N)));
+        auto* const gap = fresh.get()->data() + (p - data<D>());
 
         // The new elements before ours: nothing of ours has moved yet if this throws, so the insert
         // simply has not happened, and place can still read the elements we hold.
         place.construct(gap, 0, count);
-
-        // What is built now is the gap but nothing in front of it, and no size can say that, so for
-        // as long as the hole lasts the cleanup is spelled out here. Leaving it to target's
-        // destructor, which sees a size of zero, is what leaked the relocated elements in issue
-        // #74. Both moves below destroy whatever they managed to build themselves.
-        auto guard = detail::destroy_guard<T>(gap, gap + count);
-        std::uninitialized_move(data<D>(), p, dst);
-        guard.extend_front(dst);
-        std::uninitialized_move(p, data<D>() + s, gap + count);
-        guard.release();
-
-        target.template set_size<direction::indirect>(s + count);
-        *this = std::move(target);
-        return gap;
+        return commit_grow<D>(p, count, fresh);
     }
 
     template <typename Place>
