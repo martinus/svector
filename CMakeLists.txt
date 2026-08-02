@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.12)
 project("svector"
-    VERSION 1.2.1
+    VERSION 1.3.0
     DESCRIPTION " Compact SVO optimized vector for C++17 or higher"
     HOMEPAGE_URL "https://github.com/martinus/svector")
 

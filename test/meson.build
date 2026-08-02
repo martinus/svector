@@ -13,6 +13,7 @@ test_sources = [
     'bench/bench_sort_shuffle.cpp',
     'fuzz/api.cpp',
     'unit/alignment.cpp',
+    'unit/allocator.cpp',
     'unit/assign.cpp',
     'unit/assignment_operators.cpp',
     'unit/at.cpp',

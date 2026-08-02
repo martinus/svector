@@ -251,14 +251,35 @@ being a third the size of the next smallest object.
 ## Differences from std::vector
 
 `ankerl::svector` implements all of `std::vector`'s API, plus `std::erase`/`std::erase_if`, and comparison
-operators that work between svectors of different inline capacities. A few things are deliberately not the same:
+operators that work between svectors of different inline capacities.
+
+The third template parameter is the allocator, and it defaults to `std::allocator<T>`, so `svector<T, N>` means
+what it always did:
+
+```cpp
+auto v = ankerl::svector<int, 7, MyAllocator<int>>(MyAllocator<int>(arena));
+```
+
+Only the heap allocation goes through it — nothing is asked of it while the elements are still inline. A
+stateless allocator is an empty base, so it costs the object nothing and `sizeof` stays exactly what the table
+above says. Elements are built and destroyed through `std::allocator_traits`, so an allocator that constructs
+its own way is honoured: `std::pmr::polymorphic_allocator` passes its resource on to the elements, the same as
+in `std::vector`. When an allocator does not do that, the `<memory>` range algorithms are used instead, which is
+what keeps a relocation of a trivially copyable `T` a `memcpy`. `propagate_on_container_copy_assignment`,
+`..._move_assignment` and `..._swap` all mean what the standard says they mean, and a move assignment between
+two unequal allocators that do not propagate moves the elements one at a time rather than stealing memory it
+could not give back.
+
+A few things are deliberately not the same as `std::vector`:
 
 - **Move is only `noexcept` when the element's move is.** `std::vector` can promise an unconditional `noexcept`
   because moving it is just stealing a pointer. In direct mode the inline elements have to be relocated, which
   calls `T`'s move constructor, so the promise is only ours to make when that one is `noexcept`. Claiming it
   anyway would turn a throwing move into `std::terminate`.
 - **At most 127 inline elements**, because the direct-mode size has to fit in 7 bits.
-- **No allocator support** ([#51](https://github.com/martinus/svector/issues/51)).
+- **No allocator with a fancy pointer.** `svector`'s `iterator` is a `T*`, so an allocator whose `pointer` is
+  anything else is rejected with a `static_assert` rather than quietly misused. Everything else about an
+  allocator works as `std::vector` promises — see below.
 - **`resize_and_overwrite(count, op)`**, an extension with the same contract as
   [`std::string::resize_and_overwrite`](https://en.cppreference.com/w/cpp/string/basic_string/resize_and_overwrite):
   it hands you the raw storage and lets you fill it, skipping the value initialization `resize(count)` owes you.

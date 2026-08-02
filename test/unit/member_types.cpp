@@ -9,7 +9,7 @@ using Vec = ankerl::svector<std::string, 3>;
 // see https://en.cppreference.com/w/cpp/container/vector
 
 static_assert(std::is_same_v<Vec::value_type, std::string>);
-// no allocator_type
+static_assert(std::is_same_v<Vec::allocator_type, std::allocator<std::string>>);
 static_assert(std::is_same_v<Vec::size_type, std::size_t>);
 static_assert(std::is_same_v<Vec::difference_type, std::ptrdiff_t>);
 static_assert(std::is_same_v<Vec::reference, Vec::value_type&>);
