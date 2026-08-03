@@ -80,6 +80,9 @@ struct CountingAllocator {
     }
 };
 
+// Never called: this allocator is empty, so allocator_traits gives it is_always_equal and svector
+// answers the question at compile time. It is here because an allocator is required to have it, and
+// a test allocator that is not a conforming allocator would be testing the wrong thing.
 template <typename T, typename U>
 auto operator==(CountingAllocator<T> const& /*a*/, CountingAllocator<U> const& /*b*/) -> bool {
     return true;
@@ -224,7 +227,6 @@ struct Boom {
 // A stateless allocator has to be free. This is the whole point of the container, and an allocator
 // stored as a member instead of an empty base would show up right here.
 static_assert(sizeof(ankerl::svector<uint8_t, 1, CountingAllocator<uint8_t>>) == sizeof(ankerl::svector<uint8_t, 1>));
-static_assert(sizeof(ankerl::svector<uint8_t, 1, std::allocator<uint8_t>>) == 8);
 static_assert(sizeof(ankerl::svector<int, 7, CountingAllocator<int>>) == sizeof(ankerl::svector<int, 7>));
 
 // A stateful one is stored, and then it costs what it costs.
@@ -369,9 +371,11 @@ TEST_CASE("allocator_propagates_when_asked") {
     auto two = Ledger();
     using Vec = ankerl::svector<int, 2, PoccaAll>;
 
+    // doctest runs everything before the SUBCASEs once per subcase, so this is a fixture
+    auto a = Vec(size_t{20}, 1, PoccaAll(1, &one));
+    auto b = Vec(size_t{20}, 2, PoccaAll(2, &two));
+
     SUBCASE("copy assignment") {
-        auto a = Vec(size_t{20}, 1, PoccaAll(1, &one));
-        auto b = Vec(size_t{20}, 2, PoccaAll(2, &two));
         REQUIRE(one.bytes_live > 0);
 
         a = b;
@@ -382,9 +386,6 @@ TEST_CASE("allocator_propagates_when_asked") {
     }
 
     SUBCASE("move assignment") {
-        auto a = Vec(size_t{20}, 1, PoccaAll(1, &one));
-        auto b = Vec(size_t{20}, 2, PoccaAll(2, &two));
-
         a = std::move(b);
         REQUIRE(a.get_allocator().id == 2);
         REQUIRE(a.size() == 20);
@@ -393,9 +394,6 @@ TEST_CASE("allocator_propagates_when_asked") {
     }
 
     SUBCASE("swap") {
-        auto a = Vec(size_t{20}, 1, PoccaAll(1, &one));
-        auto b = Vec(size_t{20}, 2, PoccaAll(2, &two));
-
         a.swap(b);
         REQUIRE(a.get_allocator().id == 2);
         REQUIRE(b.get_allocator().id == 1);

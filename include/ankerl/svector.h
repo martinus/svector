@@ -129,33 +129,17 @@ constexpr auto automatic_capacity(size_t min_inline_capacity) -> size_t {
  * std::pmr::polymorphic_allocator, which passes its resource on to the elements it builds, does
  * not, and takes the loops below.
  *
- * The three construct() probes are the argument shapes the bulk operations use: nothing, an lvalue
- * to copy, an rvalue to move. Inserting from a range of some other type builds a T from whatever the
- * iterator yields, which is not probed, so an allocator with a construct() for that and for none of
- * these three would be missed. std::allocator_traits asks the same question one expression at a
- * time; this asks it once for all of them, because the answer picks a whole algorithm.
+ * See builds_directly() for which signatures are asked about and why the order matters.
  */
-template <typename A, typename T, typename = void>
-struct has_construct_value : std::false_type {};
+template <typename Void, typename A, typename... Args>
+struct has_construct_impl : std::false_type {};
 
-template <typename A, typename T>
-struct has_construct_value<A, T, std::void_t<decltype(std::declval<A&>().construct(std::declval<T*>()))>> : std::true_type {};
-
-template <typename A, typename T, typename = void>
-struct has_construct_copy : std::false_type {};
-
-template <typename A, typename T>
-struct has_construct_copy<A,
-                          T,
-                          std::void_t<decltype(std::declval<A&>().construct(std::declval<T*>(), std::declval<T const&>()))>>
+template <typename A, typename... Args>
+struct has_construct_impl<std::void_t<decltype(std::declval<A&>().construct(std::declval<Args>()...))>, A, Args...>
     : std::true_type {};
 
-template <typename A, typename T, typename = void>
-struct has_construct_move : std::false_type {};
-
-template <typename A, typename T>
-struct has_construct_move<A, T, std::void_t<decltype(std::declval<A&>().construct(std::declval<T*>(), std::declval<T&&>()))>>
-    : std::true_type {};
+template <typename A, typename... Args>
+using has_construct = has_construct_impl<void, A, Args...>;
 
 template <typename A, typename T, typename = void>
 struct has_destroy : std::false_type {};
@@ -164,12 +148,13 @@ template <typename A, typename T>
 struct has_destroy<A, T, std::void_t<decltype(std::declval<A&>().destroy(std::declval<T*>()))>> : std::true_type {};
 
 /**
- * @brief std::allocator has to be named, because until C++20 it answers the probes above.
+ * @brief std::allocator, which has to be named rather than probed.
  *
- * It carries a construct() and a destroy() of its own, deprecated in C++17 and gone in C++20, and
- * both do exactly the placement new and the ~T() the traits would have done without them. Letting
- * the probes decide would take the default allocator down the generic path, and with it every
- * svector that was written before there was an allocator to name.
+ * Until C++20 it carries a construct() and a destroy() of its own, deprecated in C++17 and gone
+ * after it, and both do exactly the placement new and the ~T() the traits would have done without
+ * them. So it answers the probes above with a yes that means no, and letting them decide would take
+ * the default allocator down the generic path -- and with it every svector written before there was
+ * an allocator to name.
  */
 template <typename A>
 struct is_std_allocator : std::false_type {};
@@ -178,8 +163,14 @@ template <typename T>
 struct is_std_allocator<std::allocator<T>> : std::true_type {};
 
 /**
- * @brief The four probes and the std::allocator exemption, put together so that no probe is asked
- *        that does not have to be.
+ * @brief The probes and the std::allocator exemption, put together so that none is asked that does
+ *        not have to be.
+ *
+ * The probed signatures are the argument shapes the bulk operations use: nothing, an lvalue to copy,
+ * an rvalue to move. Inserting from a range of some other type builds a T from whatever the iterator
+ * yields, which is not probed, so an allocator with a construct() for that and for none of these
+ * three would be missed. std::allocator_traits asks the same question one expression at a time; this
+ * asks it once for all of them, because the answer picks a whole algorithm.
  *
  * std::disjunction and std::conjunction stop instantiating at the first argument that decides the
  * answer, and that is load bearing rather than tidy: std::pmr::polymorphic_allocator::destroy() is
@@ -189,16 +180,78 @@ struct is_std_allocator<std::allocator<T>> : std::true_type {};
  */
 template <typename A, typename T>
 struct builds_directly : std::disjunction<is_std_allocator<A>,
-                                          std::conjunction<std::negation<has_construct_value<A, T>>,
-                                                           std::negation<has_construct_copy<A, T>>,
-                                                           std::negation<has_construct_move<A, T>>,
+                                          std::conjunction<std::negation<has_construct<A, T*>>,
+                                                           std::negation<has_construct<A, T*, T const&>>,
+                                                           std::negation<has_construct<A, T*, T&&>>,
                                                            std::negation<has_destroy<A, T>>>> {};
 
 template <typename A, typename T>
 inline constexpr bool builds_elements_directly = builds_directly<A, T>::value;
 
 /**
+ * @brief Whether the allocator's allocate() and deallocate() are ::operator new and ::operator
+ *        delete, so storage below can call those and skip the trip through allocator_traits.
+ *
+ * Only std::allocator, and only because the standard says that is what it does. Deliberately not
+ * the same name as the question above even though it has the same answer today: one is about how
+ * elements are built and the other about where bytes come from, and an allocator that changed its
+ * mind about one of them should not silently change the other.
+ */
+template <typename A>
+struct allocates_with_operator_new : is_std_allocator<A> {};
+
+/**
+ * @brief Holds the allocator, and holds nothing at all when it has no state.
+ *
+ * An svector is meant to be as small as its inline capacity and no larger, and for std::allocator
+ * and every other stateless allocator it stays that way: the empty base takes no space of its own.
+ * A stateful allocator is stored, and then the object grows by what it costs, which is the price of
+ * asking for one.
+ */
+template <typename A, bool = std::is_empty_v<A> && !std::is_final_v<A>>
+class allocator_holder : private A {
+public:
+    allocator_holder() = default;
+
+    explicit allocator_holder(A a)
+        : A(std::move(a)) {}
+
+    [[nodiscard]] auto allocator() -> A& {
+        return *this;
+    }
+
+    [[nodiscard]] auto allocator() const -> A const& {
+        return *this;
+    }
+};
+
+template <typename A>
+class allocator_holder<A, false> {
+    A m_allocator;
+
+public:
+    allocator_holder() = default;
+
+    explicit allocator_holder(A a)
+        : m_allocator(std::move(a)) {}
+
+    [[nodiscard]] auto allocator() -> A& {
+        return m_allocator;
+    }
+
+    [[nodiscard]] auto allocator() const -> A const& {
+        return m_allocator;
+    }
+};
+
+/**
  * @brief std::destroy() through the allocator.
+ *
+ * The static_cast<void> here and in the five functions like it below says that this branch has no
+ * use for the allocator, which is a thing gcc and clang work out for themselves -- neither warns
+ * about a parameter that only the discarded branch of an if constexpr reads. MSVC at /W4 is the one
+ * this cannot be checked against from here, and the Windows job builds with werror, so the cast
+ * stays: it costs a line and nothing else, and removing it can only be worth a red build.
  */
 template <typename A, typename T>
 void alloc_destroy(A& alloc, T* first, T* last) {
@@ -224,18 +277,24 @@ void alloc_destroy_n(A& alloc, T* first, size_t n) {
  * cleanup anyone needs. This is for the places where the built part is not a prefix of a container,
  * so no size can express it. Deleting the copy is what keeps it from being handed around and
  * destroying twice.
+ *
+ * The allocator is held the way an svector holds it rather than by pointer, so a stateless one adds
+ * nothing to the guard at all. A pointer would have been a word of its own on a path that was tuned
+ * to the instruction, and for std::allocator it would have pointed at an empty base that is never
+ * read. A copy is as good as the original: copying an allocator may not throw, and the copy
+ * compares equal, which is all destroying through it needs.
  */
 template <typename A>
-class destroy_guard {
+class destroy_guard : private allocator_holder<A> {
     using T = typename std::allocator_traits<A>::value_type;
+    using holder = allocator_holder<A>;
 
-    A* m_alloc;
     T* m_first;
     T* m_last;
 
 public:
-    destroy_guard(A& alloc, T* first, T* last)
-        : m_alloc(std::addressof(alloc))
+    destroy_guard(A const& alloc, T* first, T* last)
+        : holder(alloc)
         , m_first(first)
         , m_last(last) {}
 
@@ -243,7 +302,7 @@ public:
     auto operator=(destroy_guard const&) -> destroy_guard& = delete;
 
     ~destroy_guard() {
-        alloc_destroy(*m_alloc, m_first, m_last);
+        alloc_destroy(holder::allocator(), m_first, m_last);
     }
 
     // The guarded range only ever grows, and stays contiguous while it does.
@@ -290,16 +349,6 @@ void alloc_uninitialized_copy_n(A& alloc, It first, size_t n, T* dst) {
     }
 }
 
-template <typename A, typename T, typename It>
-void alloc_uninitialized_copy(A& alloc, It first, It last, T* dst) {
-    if constexpr (builds_elements_directly<A, T>) {
-        static_cast<void>(alloc);
-        std::uninitialized_copy(first, last, dst);
-    } else {
-        alloc_uninitialized_copy_n(alloc, first, static_cast<size_t>(std::distance(first, last)), dst);
-    }
-}
-
 template <typename A, typename T>
 void alloc_uninitialized_move(A& alloc, T* first, T* last, T* dst) {
     if constexpr (builds_elements_directly<A, T>) {
@@ -311,11 +360,6 @@ void alloc_uninitialized_move(A& alloc, T* first, T* last, T* dst) {
             ++first;
         });
     }
-}
-
-template <typename A, typename T>
-void alloc_uninitialized_move_n(A& alloc, T* first, size_t n, T* dst) {
-    alloc_uninitialized_move(alloc, first, first + n, dst);
 }
 
 template <typename A, typename T>
@@ -341,50 +385,6 @@ void alloc_uninitialized_value_construct_n(A& alloc, T* dst, size_t n) {
         });
     }
 }
-
-/**
- * @brief Holds the allocator, and holds nothing at all when it has no state.
- *
- * An svector is meant to be as small as its inline capacity and no larger, and for std::allocator
- * and every other stateless allocator it stays that way: the empty base takes no space of its own.
- * A stateful allocator is stored, and then the object grows by what it costs, which is the price of
- * asking for one.
- */
-template <typename A, bool = std::is_empty_v<A> && !std::is_final_v<A>>
-class allocator_holder : private A {
-public:
-    allocator_holder() = default;
-
-    explicit allocator_holder(A a)
-        : A(std::move(a)) {}
-
-    [[nodiscard]] auto allocator() -> A& {
-        return *this;
-    }
-
-    [[nodiscard]] auto allocator() const -> A const& {
-        return *this;
-    }
-};
-
-template <typename A>
-class allocator_holder<A, false> {
-    A m_allocator;
-
-public:
-    allocator_holder() = default;
-
-    explicit allocator_holder(A a)
-        : m_allocator(std::move(a)) {}
-
-    [[nodiscard]] auto allocator() -> A& {
-        return m_allocator;
-    }
-
-    [[nodiscard]] auto allocator() const -> A const& {
-        return m_allocator;
-    }
-};
 
 /**
  * Holds size & capacity, a glorified struct.
@@ -450,7 +450,7 @@ struct storage : public header {
     }
 
     /**
-     * @brief How many chunks hold a header plus capacity*T. alloc() and dealloc() have to agree on
+     * @brief How many chunks hold a header plus capacity*T. allocator() and dealloc() have to agree on
      *        this, and all dealloc() has left to work from is the capacity in the header.
      */
     [[nodiscard]] static constexpr auto num_chunks(size_t capacity) -> size_t {
@@ -485,7 +485,7 @@ struct storage : public header {
         }
 
         void* ptr = nullptr;
-        if constexpr (is_std_allocator<A>::value) {
+        if constexpr (allocates_with_operator_new<A>::value) {
             // std::allocator is ::operator new, so this is where it was going anyway. Taking it
             // directly is not a shortcut for its own sake: it keeps the byte count already computed
             // above instead of dividing it into chunks for allocate() to multiply back, which is
@@ -504,11 +504,11 @@ struct storage : public header {
     }
 
     /**
-     * @brief Counterpart to alloc(). Does not touch the T's, they have to be destroyed already.
+     * @brief Counterpart to allocator(). Does not touch the T's, they have to be destroyed already.
      */
     template <typename A>
     static void dealloc(A& a, storage<T>* ptr) {
-        if constexpr (is_std_allocator<A>::value) {
+        if constexpr (allocates_with_operator_new<A>::value) {
             static_cast<void>(a);
             std::destroy_at(ptr);
             ::operator delete(ptr);
@@ -529,17 +529,19 @@ struct storage : public header {
  * For the window in which an allocation exists but no svector holds it yet, which is where an
  * insert that has to grow runs the caller's constructors. Deleting the copy is what keeps it from
  * being handed around and freeing twice.
+ *
+ * Holds the allocator by value for the same reason destroy_guard does, see there.
  */
 template <typename A>
-class storage_guard {
+class storage_guard : private allocator_holder<A> {
     using T = typename std::allocator_traits<A>::value_type;
+    using holder = allocator_holder<A>;
 
-    A* m_alloc;
     storage<T>* m_storage;
 
 public:
-    storage_guard(A& alloc, storage<T>* s)
-        : m_alloc(std::addressof(alloc))
+    storage_guard(A const& alloc, storage<T>* s)
+        : holder(alloc)
         , m_storage(s) {}
 
     storage_guard(storage_guard const&) = delete;
@@ -547,7 +549,7 @@ public:
 
     ~storage_guard() {
         if (m_storage != nullptr) {
-            storage<T>::dealloc(*m_alloc, m_storage);
+            storage<T>::dealloc(holder::allocator(), m_storage);
         }
     }
 
@@ -580,13 +582,7 @@ class svector : private detail::allocator_holder<Allocator> {
 
     enum class direction { direct, indirect };
 
-    [[nodiscard]] auto alloc() -> Allocator& {
-        return holder::allocator();
-    }
-
-    [[nodiscard]] auto alloc() const -> Allocator const& {
-        return holder::allocator();
-    }
+    using holder::allocator;
 
     /**
      * A buffer to hold the data of the svector Depending on direct/indirect mode, the content it holds is like so:
@@ -612,9 +608,20 @@ class svector : private detail::allocator_holder<Allocator> {
      * neither its construct() nor its destroy(), and only the allocator knows whether that is the
      * same thing. Every stateless allocator that does not customize those is still in.
      */
-    static constexpr bool relocate_by_copying_m_data = std::is_trivially_copyable_v<T> &&
-                                                       detail::builds_elements_directly<Allocator, T> &&
-                                                       detail::size_of_svector<T>(MinInlineCapacity) <= 128U;
+    static constexpr bool relocate_by_memcpy =
+        std::is_trivially_copyable_v<T> && detail::builds_elements_directly<Allocator, T>;
+
+    static constexpr bool relocate_by_copying_m_data =
+        relocate_by_memcpy && detail::size_of_svector<T>(MinInlineCapacity) <= 128U;
+
+    /**
+     * @brief Whether destroying an element does anything at all, and so whether it is worth asking.
+     *
+     * A trivial destructor is not enough on its own any more: an allocator with a destroy() of its
+     * own has to see every element go, however little ~T() would have done.
+     */
+    static constexpr bool destroy_is_observable =
+        !std::is_trivially_destructible_v<T> || !detail::builds_elements_directly<Allocator, T>;
 
     // direct mode ///////////////////////////////////////////////////////////
 
@@ -677,11 +684,11 @@ class svector : private detail::allocator_holder<Allocator> {
     void uninitialized_move_and_destroy(T* source_ptr, T* target_ptr, size_t size) {
         // the memcpy runs neither a constructor nor a destructor, so it is only the same thing when
         // the allocator would not have run anything of its own either
-        if constexpr (std::is_trivially_copyable_v<T> && detail::builds_elements_directly<Allocator, T>) {
+        if constexpr (relocate_by_memcpy) {
             std::memcpy(target_ptr, source_ptr, size * sizeof(T));
         } else {
-            detail::alloc_uninitialized_move_n(alloc(), source_ptr, size, target_ptr);
-            detail::alloc_destroy_n(alloc(), source_ptr, size);
+            detail::alloc_uninitialized_move(allocator(), source_ptr, source_ptr + size, target_ptr);
+            detail::alloc_destroy_n(allocator(), source_ptr, size);
         }
     }
 
@@ -721,11 +728,11 @@ class svector : private detail::allocator_holder<Allocator> {
                 uninitialized_move_and_destroy(data<direction::direct>(), storage->data(), size<direction::direct>());
             } else {
                 uninitialized_move_and_destroy(data<direction::indirect>(), storage->data(), size<direction::indirect>());
-                detail::storage<T>::dealloc(alloc(), indirect());
+                detail::storage<T>::dealloc(allocator(), indirect());
             }
         } catch (...) {
-            detail::alloc_destroy_n(alloc(), storage->data() + new_size - num_constructed, num_constructed);
-            detail::storage<T>::dealloc(alloc(), storage);
+            detail::alloc_destroy_n(allocator(), storage->data() + new_size - num_constructed, num_constructed);
+            detail::storage<T>::dealloc(allocator(), storage);
             throw;
         }
         storage->size(new_size);
@@ -746,19 +753,16 @@ class svector : private detail::allocator_holder<Allocator> {
     template <class... Args>
     auto emplace_back_grow(size_t s, Args&&... args) -> T& {
         // s + 1 > capacity() >= N, so the new storage is always indirect
-        auto* storage = detail::storage<T>::alloc(alloc(), calculate_new_capacity(s + 1, s));
+        auto fresh = detail::storage_guard<Allocator>(
+            allocator(), detail::storage<T>::alloc(allocator(), calculate_new_capacity(s + 1, s)));
 
-        auto* const element = storage->data() + s;
-        try {
-            alloc_traits::construct(alloc(), element, std::forward<Args>(args)...);
-        } catch (...) {
-            detail::storage<T>::dealloc(alloc(), storage);
-            throw;
-        }
+        auto* const element = fresh.get()->data() + s;
+        alloc_traits::construct(allocator(), element, std::forward<Args>(args)...);
 
-        // args has been consumed, the old elements can be moved now. If that throws, element is
-        // the one thing already built in storage, so tell take_over_storage to clean it up.
-        take_over_storage(storage, s + 1, 1);
+        // args has been consumed, the old elements can be moved now. take_over_storage() owns the
+        // allocation from here whether it succeeds or not, so the guard lets go of it first; if the
+        // move throws, element is the one thing already built in there, hence the 1.
+        take_over_storage(fresh.release(), s + 1, 1);
         return *element;
     }
 
@@ -783,10 +787,10 @@ class svector : private detail::allocator_holder<Allocator> {
             auto* storage = indirect();
             uninitialized_move_and_destroy(storage->data(), direct_data(), storage->size());
             set_direct_and_size(storage->size());
-            detail::storage<T>::dealloc(alloc(), storage);
+            detail::storage<T>::dealloc(allocator(), storage);
         } else {
             // put everything into indirect storage
-            take_over_storage(detail::storage<T>::alloc(alloc(), new_capacity), size());
+            take_over_storage(detail::storage<T>::alloc(allocator(), new_capacity), size());
         }
     }
 
@@ -878,15 +882,31 @@ class svector : private detail::allocator_holder<Allocator> {
     }
 
     /**
+     * @brief resize(count) for a vector that has just been constructed, so there is nothing to
+     *        shrink and no capacity to keep.
+     *
+     * Not resize(count): that one asks whether it has to grow, which here it always does, and gcc
+     * makes the whole constructor 15 bytes larger for the question.
+     */
+    void resize_to_value_constructed(size_t count) {
+        reserve(count);
+        if (is_direct()) {
+            resize_after_reserve<direction::direct>(count);
+        } else {
+            resize_after_reserve<direction::indirect>(count);
+        }
+    }
+
+    /**
      * @brief We need variadic arguments so we can either use copy ctor or default ctor
      */
     template <direction D, class... Args>
     void resize_after_reserve(size_t count, Args&&... args) {
         auto current_size = size<D>();
         if (current_size > count) {
-            if constexpr (!std::is_trivially_destructible_v<T> || !detail::builds_elements_directly<Allocator, T>) {
+            if constexpr (destroy_is_observable) {
                 auto* d = data<D>();
-                detail::alloc_destroy(alloc(), d + count, d + current_size);
+                detail::alloc_destroy(allocator(), d + count, d + current_size);
             }
         } else {
             // The hand written loop this replaces left everything it had already built behind when
@@ -898,9 +918,9 @@ class svector : private detail::allocator_holder<Allocator> {
             // zero the new elements the way T() does.
             auto* const first_new = data<D>() + current_size;
             if constexpr (sizeof...(Args) == 0) {
-                detail::alloc_uninitialized_value_construct_n(alloc(), first_new, count - current_size);
+                detail::alloc_uninitialized_value_construct_n(allocator(), first_new, count - current_size);
             } else {
-                detail::alloc_uninitialized_fill_n(alloc(), first_new, count - current_size, args...);
+                detail::alloc_uninitialized_fill_n(allocator(), first_new, count - current_size, args...);
             }
         }
         set_size<D>(count);
@@ -923,7 +943,7 @@ class svector : private detail::allocator_holder<Allocator> {
         }
 
         std::move(erase_end, container_end, erase_begin);
-        detail::alloc_destroy(alloc(), container_end - num_erased, container_end);
+        detail::alloc_destroy(allocator(), container_end - num_erased, container_end);
         set_size<D>(size<D>() - num_erased);
         return erase_begin;
     }
@@ -945,7 +965,7 @@ class svector : private detail::allocator_holder<Allocator> {
 
         auto s = std::distance(first, last);
         reserve(s);
-        detail::alloc_uninitialized_copy(alloc(), first, last, data());
+        detail::alloc_uninitialized_copy_n(allocator(), first, static_cast<size_t>(s), data());
         set_size(s);
     }
 
@@ -961,7 +981,7 @@ class svector : private detail::allocator_holder<Allocator> {
             static_cast<void>(other);
             return true;
         } else {
-            return alloc() == other.alloc();
+            return allocator() == other.allocator();
         }
     }
 
@@ -1000,8 +1020,8 @@ class svector : private detail::allocator_holder<Allocator> {
             auto s = other.size<direction::direct>();
             auto* other_end = other_ptr + s;
 
-            detail::alloc_uninitialized_move(alloc(), other_ptr, other_end, data<direction::direct>());
-            detail::alloc_destroy(alloc(), other_ptr, other_end);
+            detail::alloc_uninitialized_move(allocator(), other_ptr, other_end, data<direction::direct>());
+            detail::alloc_destroy(allocator(), other_ptr, other_end);
             set_size(s);
         }
         other.set_direct_and_size(0);
@@ -1110,16 +1130,16 @@ class svector : private detail::allocator_holder<Allocator> {
         if (tail > count) {
             // The tail is long enough that shifting it right stays within the old elements plus
             // the count raw slots behind them, so all the new elements land on live ones.
-            detail::alloc_uninitialized_move(alloc(), old_end - count, old_end, old_end);
+            detail::alloc_uninitialized_move(allocator(), old_end - count, old_end, old_end);
             set_size<D>(s + count);
             std::move_backward(p, old_end - count, old_end);
             place.assign(p, count);
         } else {
             // The tail clears the ground it stood on, so the new elements behind the old end have
             // nothing under them and are built instead.
-            place.construct(alloc(), old_end, tail, count - tail);
+            place.construct(allocator(), old_end, tail, count - tail);
             set_size<D>(s + count - tail);
-            detail::alloc_uninitialized_move(alloc(), p, old_end, p + count);
+            detail::alloc_uninitialized_move(allocator(), p, old_end, p + count);
             set_size<D>(s + count);
             place.assign(p, tail);
         }
@@ -1151,10 +1171,10 @@ class svector : private detail::allocator_holder<Allocator> {
         // as long as the hole lasts the cleanup is spelled out here. Leaving it to the destructor of
         // a container that sees a size of zero is what leaked the relocated elements in issue #74.
         // Both moves below destroy whatever they managed to build themselves.
-        auto guard = detail::destroy_guard<Allocator>(alloc(), gap, gap + count);
-        detail::alloc_uninitialized_move(alloc(), old_data, p, dst);
+        auto guard = detail::destroy_guard<Allocator>(allocator(), gap, gap + count);
+        detail::alloc_uninitialized_move(allocator(), old_data, p, dst);
         guard.extend_front(dst);
-        detail::alloc_uninitialized_move(alloc(), p, old_data + s, gap + count);
+        detail::alloc_uninitialized_move(allocator(), p, old_data + s, gap + count);
         guard.release();
 
         // Nothing below throws, so this is where the new storage stops being the guard's.
@@ -1179,12 +1199,12 @@ class svector : private detail::allocator_holder<Allocator> {
         // the capacity reserve(s + count) on an empty svector would pick, which is where this used
         // to start before it built the result itself
         auto fresh = detail::storage_guard<Allocator>(
-            alloc(), detail::storage<T>::alloc(alloc(), calculate_new_capacity(s + count, N)));
+            allocator(), detail::storage<T>::alloc(allocator(), calculate_new_capacity(s + count, N)));
         auto* const gap = fresh.get()->data() + (p - data<D>());
 
         // The new elements before ours: nothing of ours has moved yet if this throws, so the insert
         // simply has not happened, and place can still read the elements we hold.
-        place.construct(alloc(), gap, 0, count);
+        place.construct(allocator(), gap, 0, count);
         return commit_grow<D>(p, count, fresh);
     }
 
@@ -1215,11 +1235,11 @@ class svector : private detail::allocator_holder<Allocator> {
 
         std::swap_ranges(mine, mine + common, theirs);
         if (s > other_s) {
-            detail::alloc_uninitialized_move(alloc(), mine + common, mine + s, theirs + common);
-            detail::alloc_destroy(alloc(), mine + common, mine + s);
+            detail::alloc_uninitialized_move(allocator(), mine + common, mine + s, theirs + common);
+            detail::alloc_destroy(allocator(), mine + common, mine + s);
         } else {
-            detail::alloc_uninitialized_move(alloc(), theirs + common, theirs + other_s, mine + common);
-            detail::alloc_destroy(alloc(), theirs + common, theirs + other_s);
+            detail::alloc_uninitialized_move(allocator(), theirs + common, theirs + other_s, mine + common);
+            detail::alloc_destroy(allocator(), theirs + common, theirs + other_s);
         }
 
         set_direct_and_size(other_s);
@@ -1238,8 +1258,8 @@ class svector : private detail::allocator_holder<Allocator> {
         auto const s = dir.direct_size();
         auto* const from = dir.direct_data();
 
-        detail::alloc_uninitialized_move(dir.alloc(), from, from + s, ind.direct_data());
-        detail::alloc_destroy(dir.alloc(), from, from + s);
+        detail::alloc_uninitialized_move(dir.allocator(), from, from + s, ind.direct_data());
+        detail::alloc_destroy(dir.allocator(), from, from + s);
 
         ind.set_direct_and_size(s);
         dir.set_indirect(storage);
@@ -1247,7 +1267,7 @@ class svector : private detail::allocator_holder<Allocator> {
 
     void destroy() {
         auto const is_dir = is_direct();
-        if constexpr (!std::is_trivially_destructible_v<T> || !detail::builds_elements_directly<Allocator, T>) {
+        if constexpr (destroy_is_observable) {
             T* ptr = nullptr;
             size_t s = 0;
             if (is_dir) {
@@ -1257,10 +1277,10 @@ class svector : private detail::allocator_holder<Allocator> {
                 ptr = data<direction::indirect>();
                 s = size<direction::indirect>();
             }
-            detail::alloc_destroy_n(alloc(), ptr, s);
+            detail::alloc_destroy_n(allocator(), ptr, s);
         }
         if (!is_dir) {
-            detail::storage<T>::dealloc(alloc(), indirect());
+            detail::storage<T>::dealloc(allocator(), indirect());
         }
         set_direct_and_size(0);
     }
@@ -1293,29 +1313,48 @@ public:
         set_direct_and_size(0);
     }
 
-    explicit svector(Allocator const& allocator) noexcept
-        : holder(allocator) {
+    explicit svector(Allocator const& alloc) noexcept
+        : holder(alloc) {
         set_direct_and_size(0);
     }
 
-    svector(size_t count, T const& value, Allocator const& allocator = Allocator())
-        : svector(allocator) {
+    /**
+     * Every constructor that takes an allocator is spelled twice rather than once with an
+     * `Allocator const& = Allocator()` default argument. A default argument of class type is a
+     * temporary the caller has to materialize and pass the address of, and it does that even for an
+     * allocator with nothing in it, so `svector<int, 7> v(n)` grew a stack slot, a lea and a third
+     * argument register over what it cost before there was an allocator at all -- 39 bytes to 47 on
+     * clang -Os. The second overload is cheaper than the default argument it replaces.
+     */
+    explicit svector(size_t count)
+        : svector() {
+        resize_to_value_constructed(count);
+    }
+
+    svector(size_t count, Allocator const& alloc)
+        : svector(alloc) {
+        resize_to_value_constructed(count);
+    }
+
+    svector(size_t count, T const& value)
+        : svector() {
         resize(count, value);
     }
 
-    explicit svector(size_t count, Allocator const& allocator = Allocator())
-        : svector(allocator) {
-        reserve(count);
-        if (is_direct()) {
-            resize_after_reserve<direction::direct>(count);
-        } else {
-            resize_after_reserve<direction::indirect>(count);
-        }
+    svector(size_t count, T const& value, Allocator const& alloc)
+        : svector(alloc) {
+        resize(count, value);
     }
 
     template <typename InputIt, typename = detail::enable_if_t<detail::is_input_iterator<InputIt>>>
-    svector(InputIt first, InputIt last, Allocator const& allocator = Allocator())
-        : svector(allocator) {
+    svector(InputIt first, InputIt last)
+        : svector() {
+        assign(first, last);
+    }
+
+    template <typename InputIt, typename = detail::enable_if_t<detail::is_input_iterator<InputIt>>>
+    svector(InputIt first, InputIt last, Allocator const& alloc)
+        : svector(alloc) {
         assign(first, last);
     }
 
@@ -1325,15 +1364,25 @@ public:
      * That is select_on_container_copy_construction(), and for most allocators it hands back the
      * same one. An allocator that owns an arena is where it does not: it can say that a copy starts
      * from a default constructed one instead of sharing the arena.
+     *
+     * It builds the holder from that answer rather than handing it to the constructor below, which
+     * would be the same materialized temporary the note above is about, on every copy of every
+     * svector.
      */
     svector(svector const& other)
-        : svector(other, alloc_traits::select_on_container_copy_construction(other.alloc())) {}
-
-    svector(svector const& other, Allocator const& allocator)
-        : svector(allocator) {
+        : holder(alloc_traits::select_on_container_copy_construction(other.allocator())) {
+        set_direct_and_size(0);
         auto s = other.size();
         reserve(s);
-        detail::alloc_uninitialized_copy(alloc(), other.begin(), other.end(), begin());
+        detail::alloc_uninitialized_copy_n(allocator(), other.begin(), s, begin());
+        set_size(s);
+    }
+
+    svector(svector const& other, Allocator const& alloc)
+        : svector(alloc) {
+        auto s = other.size();
+        reserve(s);
+        detail::alloc_uninitialized_copy_n(allocator(), other.begin(), s, begin());
         set_size(s);
     }
 
@@ -1350,7 +1399,7 @@ public:
      * allowed to throw, so it adds no condition here.
      */
     svector(svector&& other) noexcept(std::is_nothrow_move_constructible_v<T>)
-        : holder(other.alloc()) {
+        : holder(other.allocator()) {
         set_direct_and_size(0);
         do_move_assign(std::move(other));
     }
@@ -1361,8 +1410,8 @@ public:
      * Then there is nothing to take over: an allocation can only go back to an allocator that
      * compares equal to the one that handed it out, so the elements are moved one at a time.
      */
-    svector(svector&& other, Allocator const& allocator)
-        : svector(allocator) {
+    svector(svector&& other, Allocator const& alloc)
+        : svector(alloc) {
         if (can_take_over(other)) {
             do_move_assign(std::move(other));
         } else {
@@ -1370,8 +1419,11 @@ public:
         }
     }
 
-    svector(std::initializer_list<T> init, Allocator const& allocator = Allocator())
-        : svector(init.begin(), init.end(), allocator) {}
+    svector(std::initializer_list<T> init)
+        : svector(init.begin(), init.end()) {}
+
+    svector(std::initializer_list<T> init, Allocator const& alloc)
+        : svector(init.begin(), init.end(), alloc) {}
 
     ~svector() {
         destroy();
@@ -1413,7 +1465,7 @@ public:
             if (!can_take_over(other)) {
                 destroy();
             }
-            alloc() = other.alloc();
+            allocator() = other.allocator();
         }
 
         assign(other.begin(), other.end());
@@ -1437,7 +1489,7 @@ public:
 
         if constexpr (alloc_traits::propagate_on_container_move_assignment::value) {
             destroy(); // still ours to free, the allocator that gave it to us is on the next line
-            alloc() = other.alloc();
+            allocator() = other.allocator();
         } else if (!can_take_over(other)) {
             // Two allocators that do not know about each other's memory: all that is left is to
             // move the elements themselves, and other keeps its allocation and its moved from
@@ -1538,7 +1590,7 @@ public:
                 // construct before recording the size, so a throwing constructor does not leave
                 // the vector claiming an element that was never built
                 auto* const element = direct_data() + s;
-                alloc_traits::construct(alloc(), element, std::forward<Args>(args)...);
+                alloc_traits::construct(allocator(), element, std::forward<Args>(args)...);
                 set_direct_and_size(s + 1);
                 return *element;
             }
@@ -1549,7 +1601,7 @@ public:
         auto const s = storage->size();
         if (s != storage->capacity()) {
             auto* const element = storage->data() + s;
-            alloc_traits::construct(alloc(), element, std::forward<Args>(args)...);
+            alloc_traits::construct(allocator(), element, std::forward<Args>(args)...);
             storage->size(s + 1);
             return *element;
         }
@@ -1654,8 +1706,8 @@ public:
     }
 
     void clear() noexcept {
-        if constexpr (!std::is_trivially_destructible_v<T> || !detail::builds_elements_directly<Allocator, T>) {
-            detail::alloc_destroy(alloc(), begin(), end());
+        if constexpr (destroy_is_observable) {
+            detail::alloc_destroy(allocator(), begin(), end());
         }
 
         if (is_direct()) {
@@ -1680,18 +1732,19 @@ public:
     /**
      * @brief Deliberately not min()'d with the allocator's own max_size().
      *
-     * This one is static, which is what lets calculate_new_capacity() and the overflow check in
-     * insert_n() ask for it without an object, and svector<T, N>::max_size() is spelled that way in
-     * the tests. An allocator with a smaller limit of its own still holds: asking it for more than
-     * it has throws out of allocate(), which is where a container that had min()'d would have ended
-     * up anyway.
+     * An allocator with a smaller limit of its own still holds: asking it for more than it has
+     * throws out of allocate(), which is where a container that had min()'d would have ended up
+     * anyway. What that limit cannot do is be read without an allocator to read it from, and this
+     * function has been public and static since before there was one -- svector<T, N>::max_size()
+     * is spelled that way in test/unit/insert.cpp. Making it a non-static member is a breaking
+     * change and belongs to a major version, not to adding an allocator.
      */
     [[nodiscard]] static auto max_size() noexcept -> size_t {
         return (std::numeric_limits<std::ptrdiff_t>::max)();
     }
 
     [[nodiscard]] auto get_allocator() const noexcept -> Allocator {
-        return alloc();
+        return allocator();
     }
 
     /**
@@ -1725,7 +1778,7 @@ public:
 
         if constexpr (alloc_traits::propagate_on_container_swap::value) {
             using std::swap;
-            swap(alloc(), other.alloc());
+            swap(allocator(), other.allocator());
         }
 
         auto const is_dir = is_direct();
@@ -1825,7 +1878,7 @@ public:
             return begin() + s;
         }
 
-        auto tmp = svector(first, last, alloc());
+        auto tmp = svector(first, last, allocator());
         return insert(pos, std::make_move_iterator(tmp.begin()), std::make_move_iterator(tmp.end()));
     }
 
@@ -1869,7 +1922,7 @@ public:
         if (count < old_size) {
             // Shrinking: the tail is gone. Commit the smaller size *before* running op, so that
             // if op throws, the destructor sees exactly the elements that are still alive.
-            detail::alloc_destroy_n(alloc(), data() + count, old_size - count);
+            detail::alloc_destroy_n(allocator(), data() + count, old_size - count);
             set_size(count);
         }
 
