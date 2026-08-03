@@ -17,6 +17,11 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+// REQUIRE() on a string makes doctest stringify it through operator<<, and <string> only declares
+// that one -- on MSVC's standard library std::basic_ostream is still incomplete at that point, and
+// the whole translation unit fails to compile. Every other test file here gets <ostream> by way of
+// <fmt/format.h>; this one has no other use for fmt.
+#include <ostream>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
