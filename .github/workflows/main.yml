@@ -133,7 +133,12 @@ jobs:
     # compiler cache at all and was by far the slowest.
     - uses: ilammy/msvc-dev-cmd@v1
       if: matrix.msvc
-    - run: meson setup builddir ${{ matrix.setup_args }}
+    # Every runner has to build against the same fmt. The macOS images ship a Homebrew fmt
+    # newer than the vendored one, and meson prefers a system dependency over a wrap, so
+    # macOS alone was testing against a different library -- which broke macos-cpp20 inside
+    # fmt's own headers, a red leg saying nothing about svector. fmt is only test
+    # scaffolding, so pinning it to the wrap costs no coverage.
+    - run: meson setup builddir --force-fallback-for=fmt ${{ matrix.setup_args }}
       env:
         CXX: ${{ matrix.ccache_variant || 'ccache' }} ${{ matrix.cxx }}
     - run: meson test -C builddir --print-errorlogs
