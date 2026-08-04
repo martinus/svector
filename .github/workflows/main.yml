@@ -3,16 +3,26 @@ name: Build, Test, Lint
 # Build pushes to main and any pull request. Previously this was "[push, pull_request]",
 # which ran everything twice for a branch that has a PR open: once for the push and once
 # for the pull_request event.
+#
+# The weekly run is for a header-only library whose code stops changing while compilers
+# keep moving: it catches a new gcc, clang or standard library breaking us before someone
+# has to report it.
 on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    - cron: '17 4 * * 1'
 
 # A new push to a PR makes the previous run obsolete, so cancel it. Runs on main are never
 # cancelled, they are the ones the badge points at.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Nothing here writes to the repository.
+permissions:
+  contents: read
 
 env:
   # Downloaded wrap tarballs land here, so the cache key only has to track the wrap files.
@@ -30,160 +40,120 @@ jobs:
         python-version: '3.x'
     - run: ./scripts/lint/lint-all.py
 
-  linux:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-    - uses: hendrikmuhs/ccache-action@v1.2
-      with:
-        key: linux
-    - uses: actions/setup-python@v5
-      with:
-        python-version: '3.x'
-        cache: pip
-        cache-dependency-path: .github/workflows/requirements.txt
-    - uses: actions/cache@v4
-      with:
-        path: ${{ env.MESON_PACKAGE_CACHE }}
-        key: wraps-${{ hashFiles('subprojects/*.wrap') }}
-    - run: pip install -r .github/workflows/requirements.txt
-    - run: meson setup builddir/
-      env:
-        CXX: ccache c++
-    - run: meson test -C builddir/ --print-errorlogs
-    - uses: actions/upload-artifact@v4
-      if: failure()
-      with:
-        name: Linux_Meson_Testlog
-        path: builddir/meson-logs/testlog.txt
+  # The five platform/configuration builds used to be five jobs repeating the same ten
+  # lines of checkout, python, cache and artifact setup. They differ only in the runner,
+  # the compiler and the meson arguments, which is what the matrix carries. Job names are
+  # kept as they were so required checks and run history stay readable.
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # One failing configuration should not hide the state of the others.
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux
+            os: ubuntu-latest
+            cxx: c++
+          - name: macos
+            os: macos-latest
+            cxx: c++
+          - name: windows
+            os: windows-latest
+            cxx: cl
+            ccache_variant: sccache
+            msvc: true
+            extra_artifacts: builddir/test/test-svector.exe
 
-  macos:
-    runs-on: macos-latest
-    steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-python@v5
-      with:
-        python-version: '3.x'
-        cache: pip
-        cache-dependency-path: .github/workflows/requirements.txt
-    - uses: hendrikmuhs/ccache-action@v1.2
-      with:
-        key: macos
-    - uses: actions/cache@v4
-      with:
-        path: ${{ env.MESON_PACKAGE_CACHE }}
-        key: wraps-${{ hashFiles('subprojects/*.wrap') }}
-    - run: pip install -r .github/workflows/requirements.txt
-    - run: meson setup builddir/
-      env:
-        CXX: ccache c++
-    - run: meson test -C builddir/ --print-errorlogs
-    - uses: actions/upload-artifact@v4
-      if: failure()
-      with:
-        name: MacOS_Meson_Testlog
-        path: builddir/meson-logs/testlog.txt
+          # The README promises "C++17 or higher" and meson.build defaults to c++17, so
+          # without these the higher standards were only ever checked by hand before a
+          # release. MSVC is included because its C++20 mode differs most.
+          - name: linux-cpp20
+            os: ubuntu-latest
+            cxx: c++
+            setup_args: -Dcpp_std=c++20
+          - name: linux-cpp23
+            os: ubuntu-latest
+            cxx: c++
+            setup_args: -Dcpp_std=c++23
+          - name: linux-clang-cpp20
+            os: ubuntu-latest
+            cxx: clang++
+            setup_args: -Dcpp_std=c++20
+          - name: macos-cpp20
+            os: macos-latest
+            cxx: c++
+            setup_args: -Dcpp_std=c++20
+          - name: windows-cpp20
+            os: windows-latest
+            cxx: cl
+            ccache_variant: sccache
+            msvc: true
+            setup_args: -Dcpp_std=c++20
+            extra_artifacts: builddir/test/test-svector.exe
 
-  windows:
-    runs-on: windows-latest
+          # Address + undefined behaviour sanitizers. clang is used rather than g++ because
+          # its __has_feature is what the bad_alloc test uses to skip its deliberate huge
+          # allocation.
+          - name: sanitizers
+            os: ubuntu-latest
+            cxx: clang++
+            setup_args: --buildtype=debugoptimized -Db_sanitize=address,undefined -Db_lundef=false
+            asan_options: detect_stack_use_after_return=1:strict_string_checks=1
+            ubsan_options: print_stacktrace=1:halt_on_error=1
+
+          # Builds with the hardening flags a distribution would use. _GLIBCXX_ASSERTIONS is
+          # the interesting one for a container: it turns on libstdc++'s precondition checks.
+          - name: hardened
+            os: ubuntu-latest
+            cxx: c++
+            setup_args: >-
+              --buildtype=debugoptimized
+              -Dcpp_args="-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3 -D_GLIBCXX_ASSERTIONS
+              -fstack-protector-strong -fstack-clash-protection -fcf-protection=full
+              -Wformat -Wformat-security -Werror=format-security"
+              -Dcpp_link_args="-Wl,-z,relro -Wl,-z,now -Wl,-z,noexecstack"
     steps:
     - uses: actions/checkout@v4
+    - uses: hendrikmuhs/ccache-action@v1.2
+      with:
+        variant: ${{ matrix.ccache_variant || 'ccache' }}
+        key: ${{ matrix.name }}
     - uses: actions/setup-python@v5
       with:
         python-version: '3.x'
         cache: pip
         cache-dependency-path: .github/workflows/requirements.txt
-    # This job had no compiler cache at all and was by far the slowest. ccache does not
-    # support MSVC, sccache does.
-    - uses: hendrikmuhs/ccache-action@v1.2
-      with:
-        variant: sccache
-        key: windows
     - uses: actions/cache@v4
       with:
         path: ${{ env.MESON_PACKAGE_CACHE }}
         key: wraps-${{ hashFiles('subprojects/*.wrap') }}
     - run: pip install -r .github/workflows/requirements.txt
+    # ccache does not support MSVC, sccache does. Without this the windows job had no
+    # compiler cache at all and was by far the slowest.
     - uses: ilammy/msvc-dev-cmd@v1
-    - run: meson setup builddir
+      if: matrix.msvc
+    - run: meson setup builddir ${{ matrix.setup_args }}
       env:
-        CXX: sccache cl
+        CXX: ${{ matrix.ccache_variant || 'ccache' }} ${{ matrix.cxx }}
     - run: meson test -C builddir --print-errorlogs
+      env:
+        ASAN_OPTIONS: ${{ matrix.asan_options }}
+        UBSAN_OPTIONS: ${{ matrix.ubsan_options }}
     - uses: actions/upload-artifact@v4
       if: failure()
       with:
-        name: Windows_Meson_Testlog
+        name: ${{ matrix.name }}-meson-testlog
         path: |
           builddir/meson-logs/testlog.txt
-          builddir/test/test-svector.exe
+          ${{ matrix.extra_artifacts }}
 
-  # Address + undefined behaviour sanitizers. clang is used rather than g++ because its
-  # __has_feature is what the bad_alloc test uses to skip its deliberate huge allocation.
-  sanitizers:
+  # CMakeLists.txt is what consumers actually use, and nothing else in CI builds it. See
+  # test/cmake_consumer.
+  cmake-consumer:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    - uses: hendrikmuhs/ccache-action@v1.2
-      with:
-        key: sanitizers
-    - uses: actions/setup-python@v5
-      with:
-        python-version: '3.x'
-        cache: pip
-        cache-dependency-path: .github/workflows/requirements.txt
-    - uses: actions/cache@v4
-      with:
-        path: ${{ env.MESON_PACKAGE_CACHE }}
-        key: wraps-${{ hashFiles('subprojects/*.wrap') }}
-    - run: pip install -r .github/workflows/requirements.txt
-    - run: >
-        meson setup builddir/
-        --buildtype=debugoptimized
-        -Db_sanitize=address,undefined
-        -Db_lundef=false
-      env:
-        CXX: ccache clang++
-    - run: meson test -C builddir/ --print-errorlogs
-      env:
-        ASAN_OPTIONS: detect_stack_use_after_return=1:strict_string_checks=1
-        UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
-    - uses: actions/upload-artifact@v4
-      if: failure()
-      with:
-        name: Sanitizers_Meson_Testlog
-        path: builddir/meson-logs/testlog.txt
-
-  # Builds with the hardening flags a distribution would use. _GLIBCXX_ASSERTIONS is the
-  # interesting one for a container: it turns on libstdc++'s precondition checks.
-  hardened:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-    - uses: hendrikmuhs/ccache-action@v1.2
-      with:
-        key: hardened
-    - uses: actions/setup-python@v5
-      with:
-        python-version: '3.x'
-        cache: pip
-        cache-dependency-path: .github/workflows/requirements.txt
-    - uses: actions/cache@v4
-      with:
-        path: ${{ env.MESON_PACKAGE_CACHE }}
-        key: wraps-${{ hashFiles('subprojects/*.wrap') }}
-    - run: pip install -r .github/workflows/requirements.txt
-    - run: >
-        meson setup builddir/
-        --buildtype=debugoptimized
-        -Dcpp_args="-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3 -D_GLIBCXX_ASSERTIONS
-        -fstack-protector-strong -fstack-clash-protection -fcf-protection=full
-        -Wformat -Wformat-security -Werror=format-security"
-        -Dcpp_link_args="-Wl,-z,relro -Wl,-z,now -Wl,-z,noexecstack"
-      env:
-        CXX: ccache c++
-    - run: meson test -C builddir/ --print-errorlogs
-    - uses: actions/upload-artifact@v4
-      if: failure()
-      with:
-        name: Hardened_Meson_Testlog
-        path: builddir/meson-logs/testlog.txt
+    - run: cmake -S test/cmake_consumer -B builddir-cmake
+    - run: cmake --build builddir-cmake
+    - run: ./builddir-cmake/consumer

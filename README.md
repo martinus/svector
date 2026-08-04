@@ -301,8 +301,9 @@ meson test
 
 `meson test` runs the unit tests — 108 cases and ~630k assertions, much of it comparing against `std::vector`
 operation by operation — and replays a 1651 entry fuzzing corpus. CI additionally builds on Linux, macOS and
-Windows, under address+undefined sanitizers, and with a distribution's hardening flags including
-`_GLIBCXX_ASSERTIONS`.
+Windows, at C++20 as well as the default C++17 and at C++23 on Linux, under address+undefined sanitizers, and
+with a distribution's hardening flags including `_GLIBCXX_ASSERTIONS`. It also compiles a small consumer
+project against `CMakeLists.txt`, which is the only thing that exercises the CMake path.
 
 Benchmarks are separate and want a release build. There are two of them:
 
