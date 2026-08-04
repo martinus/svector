@@ -145,7 +145,7 @@ jobs:
       env:
         ASAN_OPTIONS: ${{ matrix.asan_options }}
         UBSAN_OPTIONS: ${{ matrix.ubsan_options }}
-    - uses: actions/upload-artifact@v4
+    - uses: actions/upload-artifact@v7
       if: failure()
       with:
         name: ${{ matrix.name }}-meson-testlog
