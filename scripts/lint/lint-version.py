@@ -1,9 +1,21 @@
 #!/usr/bin/env python3
 
+"""Check that every file repeating the version agrees with the ANKERL_SVECTOR_VERSION_* macros
+in svector.h, which are the reference.
+
+With --expect it also checks that reference against a version passed in. That is how the release
+workflow ties a pushed tag to what the tagged commit actually contains: the three files agreeing
+with each other says nothing about whether v1.2.1 was put on the commit that says 1.2.1."""
+
+import argparse
 import os
 import pathlib
 import re
 
+
+parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+parser.add_argument("--expect", default=None, metavar="X.Y.Z", help="also require this exact version, e.g. 1.2.1")
+args = parser.parse_args()
 
 root = os.path.abspath(pathlib.Path(__file__).parent.parent.parent)
 
@@ -58,6 +70,9 @@ for (filename, pattern, count) in file_pattern_count:
         is_ok = False
         print(f"ERROR in {filename}: expected {count} occurrences but found it {num_found} times")
 
+if args.expect is not None and args.expect != f"{major}.{minor}.{patch}":
+    is_ok = False
+    print(f"ERROR: expected version '{args.expect}' but svector.h says '{major}.{minor}.{patch}'")
+
 if not is_ok:
     exit(1)
-    
