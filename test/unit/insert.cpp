@@ -225,7 +225,7 @@ TEST_CASE("insert_count_too_large_throws") {
     // max_size() is the first count that cannot work, huge is the one that used to wrap
     for (auto const count : {huge, ankerl::svector<int, 4>::max_size()}) {
         auto v = ankerl::svector<int, 4>{1, 2, 3};
-        REQUIRE_THROWS_AS(v.insert(v.begin(), count, 5), std::bad_alloc);
+        REQUIRE_THROWS_AS(v.insert(v.begin(), count, 5), std::length_error);
 
         // the failed insert left it alone
         REQUIRE(v.size() == 3);
@@ -240,7 +240,7 @@ TEST_CASE("insert_count_too_large_throws_indirect") {
         v.push_back(i);
     }
 
-    REQUIRE_THROWS_AS(v.insert(v.begin() + 10, (std::numeric_limits<size_t>::max)(), 5), std::bad_alloc);
+    REQUIRE_THROWS_AS(v.insert(v.begin() + 10, (std::numeric_limits<size_t>::max)(), 5), std::length_error);
     REQUIRE(v.size() == 50);
     REQUIRE(v[10] == 10);
 }

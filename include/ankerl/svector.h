@@ -817,8 +817,10 @@ class svector : private detail::allocator_holder<Allocator> {
      */
     [[nodiscard]] static auto calculate_new_capacity(size_t size_to_fit, size_t starting_capacity) -> size_t {
         if (size_to_fit > max_size()) {
-            // not enough space
-            throw std::bad_alloc();
+            // Asking for more elements than can exist is a size error, not a failure to find
+            // memory, and std::vector spells it the same way. bad_alloc stays for the case that
+            // really is one: a size that is legal but that the allocator cannot satisfy.
+            throw std::length_error("svector: requested size exceeds max_size()");
         }
 
         if (size_to_fit == 0) {
@@ -1137,7 +1139,7 @@ class svector : private detail::allocator_holder<Allocator> {
         // and the wrapped sum then looked small enough to fit, so the in place shift below ran
         // straight past the end of the buffer. See issue #69.
         if (count > max_size() - s) {
-            throw std::bad_alloc();
+            throw std::length_error("svector: requested size exceeds max_size()");
         }
 
         if (count > capacity<D>() - s) {
@@ -1760,9 +1762,13 @@ public:
      * function has been public and static since before there was one -- svector<T, N>::max_size()
      * is spelled that way in test/unit/insert.cpp. Making it a non-static member is a breaking
      * change and belongs to a major version, not to adding an allocator.
+     *
+     * Divided by sizeof(T) because a count is not a byte count. It used to answer PTRDIFF_MAX for
+     * every T, which claimed a size no svector could reach: alloc() refuses anything whose bytes
+     * pass PTRDIFF_MAX, so the real ceiling has always been this. std::vector answers the same.
      */
     [[nodiscard]] static auto max_size() noexcept -> size_t {
-        return (std::numeric_limits<std::ptrdiff_t>::max)();
+        return static_cast<size_t>((std::numeric_limits<std::ptrdiff_t>::max)()) / sizeof(T);
     }
 
     [[nodiscard]] auto get_allocator() const noexcept -> Allocator {
