@@ -1,0 +1,86 @@
+name: Fuzz
+
+# The corpus in data/fuzz/api is replayed by the normal test suite on every run. That is a
+# regression guard and by construction can only find what has already been found. Nothing was
+# doing the finding: fuzz_api is built by the sanitizers job and then never run as a fuzzer.
+#
+# It is worth running. A 30 second local session turned up 20 new coverage-increasing inputs,
+# so the committed corpus is nowhere near saturated.
+on:
+  schedule:
+    - cron: '41 2 * * *'
+  workflow_dispatch:
+    inputs:
+      seconds:
+        description: how long to fuzz for
+        default: '600'
+
+permissions:
+  contents: read
+
+env:
+  MESON_PACKAGE_CACHE: subprojects/packagecache
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v7
+    - uses: actions/setup-python@v7
+      with:
+        python-version: '3.x'
+        cache: pip
+        cache-dependency-path: .github/workflows/requirements.txt
+    - uses: actions/cache@v6
+      with:
+        path: ${{ env.MESON_PACKAGE_CACHE }}
+        key: wraps-${{ hashFiles('subprojects/*.wrap') }}
+    - run: pip install -r .github/workflows/requirements.txt
+
+    # fuzz_api only exists under clang, see the guard in test/meson.build.
+    - run: meson setup builddir --force-fallback-for=fmt
+      env:
+        CXX: clang++
+    - run: ninja -C builddir test/fuzz_api
+
+    # New inputs land in the scratch directory because libFuzzer writes to the first corpus
+    # directory it is given; data/fuzz/api is only ever read here. Committing what this finds
+    # stays a human decision, see CONTRIBUTING.md.
+    - name: Fuzz
+      run: |
+        mkdir -p crashes corpus-scratch
+        ./builddir/test/fuzz_api \
+          -max_total_time=${{ inputs.seconds || 600 }} \
+          -print_final_stats=1 \
+          -artifact_prefix=crashes/ \
+          corpus-scratch data/fuzz/api
+
+    # A crash is the whole point of running this, and the reproducer is the valuable part, so
+    # it has to survive the job. Given the bugs this container has had -- #63, #65 through #70,
+    # #74, all exception safety and aliasing -- a find here is a real bug, not noise.
+    - name: Upload the crash
+      if: failure()
+      uses: actions/upload-artifact@v7
+      with:
+        name: fuzz-crash
+        path: crashes/
+
+    # -merge=1 keeps only inputs that add coverage, which is exactly what scripts/fuzz_merge.sh
+    # does locally. Without it the artifact would be everything the fuzzer happened to keep
+    # rather than the handful worth committing, and the corpus would grow without bound.
+    - name: Minimize what was found
+      run: |
+        cp -r data/fuzz/api corpus-merged
+        ./builddir/test/fuzz_api -merge=1 corpus-merged corpus-scratch
+        mkdir -p corpus-new
+        for f in corpus-merged/*; do
+          [ -e "data/fuzz/api/$(basename "$f")" ] || cp "$f" corpus-new/
+        done
+        echo "$(ls corpus-new | wc -l) new coverage-increasing inputs" >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Upload the new corpus entries
+      uses: actions/upload-artifact@v7
+      with:
+        name: corpus-new
+        path: corpus-new/
+        if-no-files-found: ignore
