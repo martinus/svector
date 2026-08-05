@@ -124,7 +124,7 @@ jobs:
         python-version: '3.x'
         cache: pip
         cache-dependency-path: .github/workflows/requirements.txt
-    - uses: actions/cache@v4
+    - uses: actions/cache@v6
       with:
         path: ${{ env.MESON_PACKAGE_CACHE }}
         key: wraps-${{ hashFiles('subprojects/*.wrap') }}
