@@ -54,11 +54,16 @@ if compiler.has_argument('-Wno-stringop-overflow')
     cpp_args += '-Wno-stringop-overflow' # g++ error in fmtlib
 endif
 
-fmt_method = 'auto'
+# fmt is only used by the test harness. A system fmt is fine normally, but it is built for the
+# host word size, so a -m32 build cannot link against it and has to build fmt from the wrap.
+#
+# method: 'builtin' used to say that and silently stopped meaning it: restricting the method
+# keeps meson from consulting the wrap's override_dependency, so the fallback came back NO and
+# a 32 bit setup failed outright rather than falling back. Ask for the subproject directly.
 if get_option('cpp_args').contains('-m32')
-    # use builtin so we can compile it for 32bit. 
-    # Can't use it as a default or sanitizer doesn't work...
-    fmt_method = 'builtin'
+    fmt_dep = subproject('fmt').get_variable('fmt_dep')
+else
+    fmt_dep = dependency('fmt')
 endif
 
 # boost and abseil are only used to compare against in the benchmarks and in
@@ -81,7 +86,7 @@ test_exe = executable(
 
         # see what's in the [provide] sections for the dependency names
         dependency('doctest'),
-        dependency('fmt', method: fmt_method),
+        fmt_dep,
     ],
 )
 
@@ -120,7 +125,7 @@ if compiler.get_id() == 'clang'
     fuzz_deps = [
             dependency('doctest'),
             dependency('threads'),
-            dependency('fmt', method: fmt_method),
+            fmt_dep,
         ]
     fuzz_cpp_args = [
         '-DFUZZ',
