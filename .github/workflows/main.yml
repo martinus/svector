@@ -113,6 +113,15 @@ jobs:
               -fstack-protector-strong -fstack-clash-protection -fcf-protection=full
               -Wformat -Wformat-security -Werror=format-security"
               -Dcpp_link_args="-Wl,-z,relro -Wl,-z,now -Wl,-z,noexecstack"
+
+          # A tagged pointer packed into a byte array is exactly the design that a different
+          # word size can break, and test/meson.build has carried a -m32 accommodation for
+          # years that no job ever built. It had rotted into not configuring at all.
+          - name: linux-32bit
+            os: ubuntu-latest
+            cxx: c++
+            multilib: true
+            setup_args: -Dcpp_args=-m32 -Dcpp_link_args=-m32
     steps:
     - uses: actions/checkout@v7
     - uses: hendrikmuhs/ccache-action@v1.2
@@ -129,6 +138,10 @@ jobs:
         path: ${{ env.MESON_PACKAGE_CACHE }}
         key: wraps-${{ hashFiles('subprojects/*.wrap') }}
     - run: pip install -r .github/workflows/requirements.txt
+    # The runner images carry a 64 bit only toolchain, so -m32 needs the 32 bit libstdc++.
+    - name: 32 bit toolchain
+      if: matrix.multilib
+      run: sudo apt-get update && sudo apt-get install -y g++-multilib
     # ccache does not support MSVC, sccache does. Without this the windows job had no
     # compiler cache at all and was by far the slowest.
     - uses: ilammy/msvc-dev-cmd@v1

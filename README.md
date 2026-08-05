@@ -302,8 +302,13 @@ meson test
 `meson test` runs the unit tests — 108 cases and ~630k assertions, much of it comparing against `std::vector`
 operation by operation — and replays a 1651 entry fuzzing corpus. CI additionally builds on Linux, macOS and
 Windows, at C++20 as well as the default C++17 and at C++23 on Linux, under address+undefined sanitizers, and
-with a distribution's hardening flags including `_GLIBCXX_ASSERTIONS`. It also compiles a small consumer
-project against `CMakeLists.txt`, which is the only thing that exercises the CMake path.
+with a distribution's hardening flags including `_GLIBCXX_ASSERTIONS`, and as a 32 bit build. It also compiles
+a small consumer project against `CMakeLists.txt`, which is the only thing that exercises the CMake path.
+
+The one thing a build has to provide is a **little endian** target, because the direct/indirect flag shares a
+byte with the low end of the indirect pointer. That is checked with a `static_assert` rather than left to be
+discovered. Both 32 and 64 bit are fine: `svector<uint8_t, 1>` is 8 bytes holding 7 where a pointer is 8 bytes,
+and 4 holding 3 where it is 4.
 
 Benchmarks are separate and want a release build. There are two of them:
 

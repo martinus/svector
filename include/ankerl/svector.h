@@ -593,9 +593,22 @@ class svector : private detail::allocator_holder<Allocator> {
      *    Then 0-X bytes unused (padding), and then the actual inline T data.
      * indirect:
      *    m_data[0] & 1: lowest bit is 0 for indirect mode
-     *    m_data[0..7]: stores an uintptr_t, which points to the indirect data.
+     *    m_data[0..sizeof(void*)-1]: stores an uintptr_t, which points to the indirect data.
+     *
+     * The mode flag and the pointer share m_data[0], which only holds on a little endian target.
+     * There the pointer's least significant byte lands in m_data[0] and alignment guarantees its
+     * low bit is 0, so the flag has a byte to live in. On a big endian target m_data[0] would be
+     * the pointer's most significant byte instead and the flag would read something unrelated.
      */
     alignas(detail::alignment_of_svector<T>()) std::array<uint8_t, detail::size_of_svector<T>(MinInlineCapacity)> m_data;
+
+    // Nothing in CI can catch this: every runner is little endian. MSVC does not define
+    // __BYTE_ORDER__ but targets nothing big endian either, so check where a check is possible.
+#if defined(__BYTE_ORDER__) && defined(__ORDER_LITTLE_ENDIAN__)
+    static_assert(__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__,
+                  "svector packs its direct/indirect flag into the low byte of the indirect pointer, "
+                  "which requires a little endian target");
+#endif
 
     /**
      * @brief Whether the whole inline buffer can stand in for the elements it holds.
