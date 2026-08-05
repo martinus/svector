@@ -32,6 +32,16 @@
 #    define SANITIZER_ACTIVE 1
 #endif
 
+// gcc constant folds a size derived from max_size() and then reasons about an array of that many
+// elements, which at -O2 with the hardening flags is an -Warray-bounds error and, on gcc 13, an
+// internal compiler error. The size is a runtime value in any real use, so make it one here too.
+namespace {
+auto opaque(size_t value) -> size_t {
+    volatile size_t hidden = value;
+    return hidden;
+}
+} // namespace
+
 TEST_CASE("reserve_bad_alloc") {
     if constexpr (RUNNING_ON_VALGRIND || SANITIZER_ACTIVE) {
         // this test doesn't work with valgrind or some sanitizers.
@@ -45,7 +55,7 @@ TEST_CASE("reserve_bad_alloc") {
 
         // max_size() itself is a legal size, so this is a real allocation failure rather than a
         // size error, and stays bad_alloc. One past it is the size error, see reserve_length_error.
-        REQUIRE_THROWS_AS(sv.reserve(sv.max_size()), std::bad_alloc);
+        REQUIRE_THROWS_AS(sv.reserve(opaque(sv.max_size())), std::bad_alloc);
     }
 }
 
@@ -53,9 +63,9 @@ TEST_CASE("reserve_bad_alloc") {
 // std::vector throws and what this used to get wrong by answering bad_alloc for both.
 TEST_CASE("reserve_length_error") {
     auto sv = ankerl::svector<std::string, 3>();
-    REQUIRE_THROWS_AS(sv.reserve(sv.max_size() + 1), std::length_error);
-    REQUIRE_THROWS_AS(sv.resize(sv.max_size() + 1), std::length_error);
-    REQUIRE_THROWS_AS(sv.resize(sv.max_size() + 1, "x"), std::length_error);
+    REQUIRE_THROWS_AS(sv.reserve(opaque(sv.max_size() + 1)), std::length_error);
+    REQUIRE_THROWS_AS(sv.resize(opaque(sv.max_size() + 1)), std::length_error);
+    REQUIRE_THROWS_AS(sv.resize(opaque(sv.max_size() + 1), "x"), std::length_error);
 
     // and it is still usable afterwards
     REQUIRE(sv.empty());
@@ -69,6 +79,6 @@ TEST_CASE("reserve_length_error") {
 TEST_CASE("growth_below_max_size_reaches_the_allocator") {
     auto sv = ankerl::svector<uint8_t, 7>();
     REQUIRE(sv.max_size() == static_cast<size_t>(std::numeric_limits<std::ptrdiff_t>::max()));
-    REQUIRE_THROWS_AS(sv.reserve(sv.max_size() - 1), std::bad_alloc);
+    REQUIRE_THROWS_AS(sv.reserve(opaque(sv.max_size() - 1)), std::bad_alloc);
     REQUIRE(sv.empty());
 }
