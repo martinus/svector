@@ -38,7 +38,15 @@ jobs:
     - uses: actions/setup-python@v7
       with:
         python-version: '3.x'
+    # Pinned, because .clang-tidy enables whole families and families gain checks in every
+    # release, so an unpinned version would turn a toolchain bump into a red build. Installed
+    # rather than run from the image the script defaults to: that keeps this job quick and off
+    # Docker Hub, whose anonymous pull limit is shared across runners. If a future runner image
+    # carries a libstdc++ this clang cannot parse, that fails here and loudly, which is the point.
+    - run: sudo apt-get update && sudo apt-get install -y clang-tidy-18
     - run: ./scripts/lint/lint-all.py
+      env:
+        SVECTOR_CLANG_TIDY: clang-tidy-18
 
   # The five platform/configuration builds used to be five jobs repeating the same ten
   # lines of checkout, python, cache and artifact setup. They differ only in the runner,
