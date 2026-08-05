@@ -172,6 +172,30 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v7
-    - run: cmake -S test/cmake_consumer -B builddir-cmake
-    - run: cmake --build builddir-cmake
-    - run: ./builddir-cmake/consumer
+    - name: add_subdirectory
+      run: |
+        cmake -S test/cmake_consumer -B builddir-cmake
+        cmake --build builddir-cmake
+        ./builddir-cmake/consumer
+    - name: install
+      run: |
+        cmake -S . -B builddir-install -DCMAKE_INSTALL_PREFIX="$PWD/prefix"
+        cmake --build builddir-install --target install
+    # Asking for major version 1 rather than the exact one, so this does not need editing on
+    # every release. SameMajorVersion is the compatibility the config declares.
+    - name: find_package
+      run: |
+        cmake -S test/cmake_consumer/installed -B builddir-find \
+          -DCMAKE_PREFIX_PATH="$PWD/prefix" -DSVECTOR_REQUIRED_VERSION=1
+        cmake --build builddir-find
+        ./builddir-find/consumer-installed
+    # The happy path passing says nothing about whether the version is actually checked.
+    - name: a version that is not installed has to be refused
+      run: |
+        if cmake -S test/cmake_consumer/installed -B builddir-badver \
+            -DCMAKE_PREFIX_PATH="$PWD/prefix" -DSVECTOR_REQUIRED_VERSION=99 >/dev/null 2>&1; then
+          echo "::error::find_package accepted version 99, so it is not checking versions"
+          exit 1
+        fi
+    - name: pkg-config
+      run: PKG_CONFIG_PATH="$PWD/prefix/share/pkgconfig" pkg-config --cflags --modversion svector

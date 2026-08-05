@@ -2,6 +2,7 @@
 
 #include <cstdio>
 
+// Shared by both consumer projects here, the add_subdirectory one and the find_package one.
 // Deliberately shallow: this checks that the CMake target carries the include directory and
 // the C++17 requirement, not that svector behaves. The meson suite owns behaviour.
 auto main() -> int {
@@ -13,7 +14,7 @@ auto main() -> int {
         return 1;
     }
 
-    std::printf("consumed svector %d.%d.%d through add_subdirectory\n",
+    std::printf("consumed svector %d.%d.%d through CMake\n",
                 ANKERL_SVECTOR_VERSION_MAJOR,
                 ANKERL_SVECTOR_VERSION_MINOR,
                 ANKERL_SVECTOR_VERSION_PATCH);

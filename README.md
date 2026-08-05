@@ -37,6 +37,23 @@ auto v = ankerl::svector<int, 7>(); // 7 int inline, heap only if it outgrows th
 v.push_back(42);
 ```
 
+Copying that one header into your project is a perfectly good way to use it. If you would rather a build system
+did it, take your pick:
+
+```cmake
+add_subdirectory(svector)            # a submodule, or FetchContent
+target_link_libraries(you PRIVATE svector::svector)
+
+find_package(svector 1 REQUIRED)     # after cmake --install, or from a package
+target_link_libraries(you PRIVATE svector::svector)
+```
+
+```meson
+svector_dep = dependency('svector')  # with subprojects/svector.wrap
+```
+
+A `pkg-config` file is installed as well, for builds that use neither.
+
 ## How compact can it get?
 
 What is the smallest each implementation can be made, how many `uint8_t` fit inline at that size, and what does
@@ -290,8 +307,8 @@ A few things are deliberately not the same as `std::vector`:
 
 ## Building & Testing
 
-This project uses the [Meson](https://mesonbuild.com/) build system. The `CMakeLists.txt` is a convenience for
-consumers and does not build or run the tests.
+This project uses the [Meson](https://mesonbuild.com/) build system. The `CMakeLists.txt` is there for consumers
+— it defines the target and installs the package — and never builds or runs the tests.
 
 ```sh
 meson setup builddir
