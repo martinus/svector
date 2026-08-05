@@ -34,7 +34,7 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
     - uses: actions/setup-python@v7
       with:
         python-version: '3.x'
@@ -114,7 +114,7 @@ jobs:
               -Wformat -Wformat-security -Werror=format-security"
               -Dcpp_link_args="-Wl,-z,relro -Wl,-z,now -Wl,-z,noexecstack"
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
     - uses: hendrikmuhs/ccache-action@v1.2
       with:
         variant: ${{ matrix.ccache_variant || 'ccache' }}
@@ -158,7 +158,7 @@ jobs:
   cmake-consumer:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
     - run: cmake -S test/cmake_consumer -B builddir-cmake
     - run: cmake --build builddir-cmake
     - run: ./builddir-cmake/consumer
