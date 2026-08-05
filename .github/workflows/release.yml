@@ -17,7 +17,7 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
       with:
         # The ancestor check below needs main and the history connecting it to the tag.
         fetch-depth: 0
