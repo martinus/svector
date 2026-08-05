@@ -1,6 +1,44 @@
 ---
-Checks: "*,\
-  -altera*,\
+# Enabled by family rather than "*". "*" turns on every check any future clang-tidy adds, which
+# is why this config was never wired into CI: it would have gone red on a toolchain bump for
+# reasons that have nothing to do with a change. The families below are the ones that carry
+# signal for a container; the ones left out are house styles for other projects.
+#
+# Families still grow, so what actually pins this is the clang-tidy version, which
+# scripts/lint/lint-clang-tidy.py runs from a fixed container image. See CONTRIBUTING.md.
+#
+# Turned off because the check is wrong for this code rather than because the code is wrong.
+# Anything deliberate at a single site is a NOLINT with a reason at that site instead.
+#
+#   macro-to-enum                    ANKERL_SVECTOR_VERSION_* are public API and are used by the
+#                                    preprocessor to build the inline namespace name. They cannot
+#                                    be enums.
+#   avoid-c-arrays                   detail::storage keeps its elements in a trailing array, which
+#                                    is the whole point of allocating header and elements together.
+#   avoid-const-or-ref-data-members  storage's capacity is const on purpose, and the fill/emplace
+#                                    helpers hold a reference to the caller's value by design.
+#   non-private-member-variables     the internal helpers are aggregates holding exactly what they
+#                                    say; making them private would need accessors and nothing else.
+#   enum-size                        the one enum is a template tag for dispatch. It is never
+#                                    stored, so its underlying type costs nothing.
+#   redundant-inline-specifier       the explicit inline in the header is the author's style.
+#   use-nodiscard                    at() does the bounds check that is its reason to exist, so
+#                                    calling it and dropping the reference is legitimate.
+#   include-cleaner                  which standard header declares what is a libstdc++ versus
+#                                    libc++ detail, so this cannot agree with itself across the
+#                                    implementations the suite already builds on.
+Checks: "-*,\
+  bugprone-*,\
+  cert-*,\
+  clang-analyzer-*,\
+  concurrency-*,\
+  cppcoreguidelines-*,\
+  hicpp-*,\
+  misc-*,\
+  modernize-*,\
+  performance-*,\
+  portability-*,\
+  readability-*,\
   -bugprone-easily-swappable-parameters,\
   -cert-dcl21-cpp,\
   -cert-err58-cpp,\
@@ -10,18 +48,22 @@ Checks: "*,\
   -cppcoreguidelines-pro-bounds-constant-array-index,\
   -cppcoreguidelines-pro-bounds-pointer-arithmetic,\
   -cppcoreguidelines-pro-type-reinterpret-cast,\
-  -fuchsia-default-arguments-calls,\
-  -fuchsia-overloaded-operator,\
-  -fuchsia-statically-constructed-objects,\
-  -fuchsia-trailing-return,\
-  -google-build-using-namespace,\
-  -google-readability-todo,\
-  -google-runtime-int,\
-  -google-runtime-references,\
-  -llvm-header-guard,\
-  -llvmlibc-*,\
-  -llvmlibc-callee-namespace,\
   -readability-function-cognitive-complexity,\
   -readability-identifier-length,\
   -readability-magic-numbers,\
+  -cppcoreguidelines-macro-to-enum,\
+  -modernize-macro-to-enum,\
+  -cppcoreguidelines-avoid-c-arrays,\
+  -hicpp-avoid-c-arrays,\
+  -modernize-avoid-c-arrays,\
+  -cppcoreguidelines-avoid-const-or-ref-data-members,\
+  -misc-non-private-member-variables-in-classes,\
+  -performance-enum-size,\
+  -readability-redundant-inline-specifier,\
+  -modernize-use-nodiscard,\
+  -misc-include-cleaner,\
   "
+
+# The header is the product; everything else in this repository is scaffolding for it.
+HeaderFilterRegex: '.*ankerl/svector\.h$'
+WarningsAsErrors: '*'

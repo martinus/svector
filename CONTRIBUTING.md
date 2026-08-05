@@ -7,6 +7,29 @@ You want to contribute? Awesome!
 3. Format the code with `clang-format`
 4. create a PR
 
+## Linting
+
+```sh
+./scripts/lint/lint-all.py
+```
+
+That runs clang-format, the version consistency check, and clang-tidy over the header. CI runs the
+same script.
+
+clang-tidy is **pinned to version 18**, and `.clang-tidy` enables whole families of checks. Those
+families gain checks in every release, so without the pin a new clang-tidy would turn an unrelated
+toolchain upgrade into a red build — which is why the config sat here for years without ever being
+enforced. Pinning only the compiler is not enough either: clang-tidy parses the code with whatever
+standard library the machine has, and a libstdc++ newer than the pinned clang does not compile. So
+by default the check runs from a container image, which pins both halves, and needs docker or
+podman. Set `SVECTOR_CLANG_TIDY=clang-tidy-18` to use a local binary instead, which is what CI
+does. With neither available the check skips rather than failing.
+
+If a check fires on something deliberate, suppress it at that line with a `NOLINT` naming the
+check and a comment saying why, rather than turning the check off for the whole project. The
+existing ones are worth reading first: several of them mark places where doing what the check asks
+would reintroduce a bug that has already been fixed once.
+
 ## Fuzzing
 
 `data/fuzz/api` is a minimized corpus that the normal test suite replays on every run. That

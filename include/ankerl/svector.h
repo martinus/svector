@@ -72,7 +72,7 @@ inline namespace ANKERL_SVECTOR_NAMESPACE {
 namespace detail {
 
 template <typename Condition, typename T = void>
-using enable_if_t = typename std::enable_if<Condition::value, T>::type;
+using enable_if_t = std::enable_if_t<Condition::value, T>;
 
 template <typename It>
 using is_input_iterator = std::is_base_of<std::input_iterator_tag, typename std::iterator_traits<It>::iterator_category>;
@@ -285,6 +285,7 @@ void alloc_destroy_n(A& alloc, T* first, size_t n) {
  * compares equal, which is all destroying through it needs.
  */
 template <typename A>
+// NOLINTNEXTLINE(cppcoreguidelines-special-member-functions,hicpp-special-member-functions)
 class destroy_guard : private allocator_holder<A> {
     using T = typename std::allocator_traits<A>::value_type;
     using holder = allocator_holder<A>;
@@ -533,6 +534,7 @@ struct storage : public header {
  * Holds the allocator by value for the same reason destroy_guard does, see there.
  */
 template <typename A>
+// NOLINTNEXTLINE(cppcoreguidelines-special-member-functions,hicpp-special-member-functions)
 class storage_guard : private allocator_holder<A> {
     using T = typename std::allocator_traits<A>::value_type;
     using holder = allocator_holder<A>;
@@ -659,6 +661,7 @@ class svector : private detail::allocator_holder<Allocator> {
 
     [[nodiscard]] auto indirect() -> detail::storage<T>* {
         detail::storage<T>* ptr; // NOLINT(cppcoreguidelines-init-variables)
+        // NOLINTNEXTLINE(bugprone-sizeof-expression,bugprone-multi-level-implicit-pointer-conversion)
         std::memcpy(&ptr, m_data.data(), sizeof(ptr));
         return ptr;
     }
@@ -675,10 +678,12 @@ class svector : private detail::allocator_holder<Allocator> {
      * already answered, and it is 4 of the 29 instructions of an indirect swap.
      */
     void set_indirect_unchecked(detail::storage<T>* ptr) {
+        // NOLINTNEXTLINE(bugprone-sizeof-expression,bugprone-multi-level-implicit-pointer-conversion)
         std::memcpy(m_data.data(), &ptr, sizeof(ptr));
     }
 
     void set_indirect(detail::storage<T>* ptr) {
+        // NOLINTNEXTLINE(bugprone-sizeof-expression,bugprone-multi-level-implicit-pointer-conversion)
         std::memcpy(m_data.data(), &ptr, sizeof(ptr));
 
         // safety check to guarantee the lowest bit is 0
@@ -914,6 +919,7 @@ class svector : private detail::allocator_holder<Allocator> {
      * @brief We need variadic arguments so we can either use copy ctor or default ctor
      */
     template <direction D, class... Args>
+    // NOLINTNEXTLINE(cppcoreguidelines-missing-std-forward)
     void resize_after_reserve(size_t count, Args&&... args) {
         auto current_size = size<D>();
         if (current_size > count) {
@@ -1005,6 +1011,7 @@ class svector : private detail::allocator_holder<Allocator> {
      * because they compare equal, or because ours has just been replaced by other's. Every caller
      * checks; the one that cannot moves the elements one at a time instead.
      */
+    // NOLINTNEXTLINE(cppcoreguidelines-rvalue-reference-param-not-moved)
     void do_move_assign(svector&& other) {
         /**
          * Everything that makes up an svector lives inside m_data: in indirect mode just the
@@ -1442,11 +1449,12 @@ public:
         destroy();
     }
 
+    // NOLINTNEXTLINE(misc-no-recursion)
     void assign(size_t count, T const& value) {
         if (is_reference_into_self(value)) {
             // clear() destroys every element, including the one value refers to.
             // Copy it to the stack first, then it's an ordinary assign. v.assign(1000, v[0])
-            auto const tmp = value;
+            auto const tmp = value; // NOLINT(performance-unnecessary-copy-initialization)
             assign(count, tmp);
             return;
         }
@@ -1533,13 +1541,14 @@ public:
         }
     }
 
+    // NOLINTNEXTLINE(misc-no-recursion)
     void resize(size_t count, T const& value) {
         if (is_reference_into_self(value)) {
             // reserve() below moves the elements into new storage and destroys the originals,
             // so value has to be copied out of the way first. v.resize(1000, v[0])
             // Deliberately not also testing count > capacity(): duplicating the condition
             // below would silently stop matching if that one ever changes.
-            auto const tmp = value;
+            auto const tmp = value; // NOLINT(performance-unnecessary-copy-initialization)
             resize(count, tmp);
             return;
         }
@@ -1865,11 +1874,12 @@ public:
         return emplace(pos, std::move(value));
     }
 
+    // NOLINTNEXTLINE(misc-no-recursion)
     auto insert(const_iterator pos, size_t count, T const& value) -> iterator {
         if (is_reference_into_self(value)) {
             // the shift moves our elements around and assigns over them, so value has to be
             // copied out of the way first. v.insert(v.begin(), 1000, v[0])
-            auto const tmp = value;
+            auto const tmp = value; // NOLINT(performance-unnecessary-copy-initialization)
             return insert(pos, count, tmp);
         }
         return insert_n(pos, count, place_copies{value});
