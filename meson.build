@@ -28,5 +28,16 @@ project('svector', 'cpp',
     ])
 
 incdir = include_directories('include')
-subdir('test')
+
+# So a parent project can use svector as a meson subproject: with this, its dependency('svector')
+# resolves to us through the wrap. There was no way to consume this from meson at all before.
+svector_dep = declare_dependency(include_directories: incdir)
+meson.override_dependency('svector', svector_dep)
+
+# A parent pulling svector in wants the header, not our test suite and not our headers in its
+# install tree.
+if not meson.is_subproject()
+    install_headers('include/ankerl/svector.h', subdir: 'ankerl')
+    subdir('test')
+endif
 
