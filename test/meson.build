@@ -35,6 +35,7 @@ test_sources = [
     'unit/noexcept_contract.cpp',
     'unit/pop_back.cpp',
     'unit/push_back.cpp',
+    'unit/ranges.cpp',
     'unit/reserve.cpp',
     'unit/resize.cpp',
     'unit/resize_and_overwrite.cpp',

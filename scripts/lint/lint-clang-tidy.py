@@ -15,6 +15,12 @@ contributors who would rather not install a second clang.
 svector is a template, so a check only sees what something instantiated. The translation unit
 below therefore exercises a broad spread of the API: with only a push_back, most of the container
 is never looked at.
+
+Known gap: the C++23 range members are invisible here. The pinned image's standard library has no
+std::from_range_t, so ANKERL_SVECTOR_HAS_RANGES is 0 and that code is not compiled at all,
+whatever -std is passed. Raising the pin would cover them, at the cost of re-curating the check
+list against whatever the newer clang-tidy has added. The C++23 build legs compile those members
+with -Werror in the meantime.
 """
 
 import os
