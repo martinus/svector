@@ -585,3 +585,92 @@ TEST_CASE("allocator_pmr_passes_its_resource_on") {
     REQUIRE(sv.front() == "built by emplace, and long enough to have to allocate for itself");
 }
 #endif
+
+// The extended move constructor has two halves and only one of them was ever run: every test that
+// reached it named an allocator that did not compare equal, so it always moved the elements one at
+// a time. This is the other half, where the allocation itself is taken over.
+TEST_CASE("extended_move_ctor_takes_over_when_allocators_match") {
+    SUBCASE("always equal allocator, indirect") {
+        // std::allocator is is_always_equal, so can_take_over() is a compile time yes and no
+        // allocator is looked at. This is the common case and nothing covered it.
+        auto a = ankerl::svector<std::string, 3>();
+        for (int i = 0; i < 50; ++i) {
+            a.push_back("element number " + std::to_string(i) + ", long enough to allocate");
+        }
+        auto const* const data_before = a.data();
+
+        auto b = ankerl::svector<std::string, 3>(std::move(a), std::allocator<std::string>{});
+
+        // taken over, not copied: the elements are still where they were
+        REQUIRE(b.data() == data_before);
+        REQUIRE(b.size() == 50);
+        REQUIRE(b[0] == "element number 0, long enough to allocate");
+        REQUIRE(b[49] == "element number 49, long enough to allocate");
+    }
+
+    SUBCASE("always equal allocator, direct") {
+        auto a = ankerl::svector<std::string, 3>();
+        a.push_back("one");
+        a.push_back("two");
+
+        auto b = ankerl::svector<std::string, 3>(std::move(a), std::allocator<std::string>{});
+        REQUIRE(b.size() == 2);
+        REQUIRE(b[0] == "one");
+        REQUIRE(b[1] == "two");
+    }
+
+    SUBCASE("stateful allocators that compare equal") {
+        // is_always_equal is false here, so this is the runtime yes: same id, so the allocation
+        // can go back to it and is taken over rather than rebuilt.
+        auto ledger = Ledger();
+        using Vec = ankerl::svector<int, 2, PoccaNone>;
+
+        auto a = Vec(size_t{40}, 7, PoccaNone(3, &ledger));
+        auto const allocations_before = ledger.allocations;
+        auto const* const data_before = a.data();
+
+        auto b = Vec(std::move(a), PoccaNone(3, &ledger));
+
+        // no second allocation: the first one was adopted
+        REQUIRE(ledger.allocations == allocations_before);
+        REQUIRE(b.data() == data_before);
+        REQUIRE(b.get_allocator().id == 3);
+        REQUIRE(b.size() == 40);
+        REQUIRE(b.front() == 7);
+        REQUIRE(b.back() == 7);
+    }
+
+    SUBCASE("stateful allocators that do not compare equal still copy") {
+        // the half that was already covered, kept next to the other one so the contrast is visible
+        auto ledger = Ledger();
+        using Vec = ankerl::svector<int, 2, PoccaNone>;
+
+        auto a = Vec(size_t{40}, 7, PoccaNone(3, &ledger));
+        auto const allocations_before = ledger.allocations;
+
+        auto b = Vec(std::move(a), PoccaNone(4, &ledger));
+
+        REQUIRE(ledger.allocations > allocations_before);
+        REQUIRE(b.get_allocator().id == 4);
+        REQUIRE(b.size() == 40);
+        REQUIRE(b.front() == 7);
+    }
+}
+
+// An allocator with its own construct() takes the element by element path through construct_each(),
+// which is a different loop from the <memory> algorithms the default allocator gets.
+TEST_CASE("range_construct_through_an_allocator_that_constructs") {
+    auto const source = std::vector<int>{1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+
+    g_constructed = 0;
+    g_destroyed = 0;
+    {
+        auto v = ankerl::svector<int, 2, MarkingAllocator<int>>(source.begin(), source.end());
+        REQUIRE(v.size() == source.size());
+        for (size_t i = 0; i < source.size(); ++i) {
+            REQUIRE(v[i] == source[i]);
+        }
+        REQUIRE(g_constructed >= source.size());
+    }
+    REQUIRE(g_destroyed >= source.size());
+}

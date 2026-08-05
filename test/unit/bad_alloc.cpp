@@ -63,9 +63,10 @@ TEST_CASE("reserve_length_error") {
     REQUIRE(sv.size() == 1);
 }
 
-// The doubling in calculate_new_capacity() overflows long before it reaches a count this large,
-// which is the branch that clamps to max_size() rather than wrapping to something small.
-TEST_CASE("growth_clamps_at_max_size") {
+// A count just under max_size() is a legal size, so it goes all the way to the allocator rather
+// than being refused. What is being checked is that the doubling on the way there does not wrap
+// and hand the allocation something small: it is clamped to max_size(), and that is what fails.
+TEST_CASE("growth_below_max_size_reaches_the_allocator") {
     auto sv = ankerl::svector<uint8_t, 7>();
     REQUIRE(sv.max_size() == static_cast<size_t>(std::numeric_limits<std::ptrdiff_t>::max()));
     REQUIRE_THROWS_AS(sv.reserve(sv.max_size() - 1), std::bad_alloc);
