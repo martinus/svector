@@ -1,5 +1,5 @@
 // ┌─┐┬  ┬┌─┐┌─┐┌┬┐┌─┐┬─┐   Compact SVO optimized vector C++17 or higher
-// └─┐└┐┌┘├┤ │   │ │ │├┬┘   Version 1.3.0
+// └─┐└┐┌┘├┤ │   │ │ │├┬┘   Version 1.4.0
 // └─┘ └┘ └─┘└─┘ ┴ └─┘┴└─   https://github.com/martinus/svector
 //
 // Licensed under the MIT License <http://opensource.org/licenses/MIT>.
@@ -29,7 +29,7 @@
 
 // see https://semver.org/spec/v2.0.0.html
 #define ANKERL_SVECTOR_VERSION_MAJOR 1 // incompatible API changes
-#define ANKERL_SVECTOR_VERSION_MINOR 3 // add functionality in a backwards compatible manner
+#define ANKERL_SVECTOR_VERSION_MINOR 4 // add functionality in a backwards compatible manner
 #define ANKERL_SVECTOR_VERSION_PATCH 0 // backwards compatible bug fixes
 
 // API versioning with inline namespace, see https://www.foonathan.net/2018/11/inline-namespaces/
@@ -67,6 +67,23 @@
 #include <type_traits>
 #include <utility>
 
+#if defined(__has_include)
+#    if __has_include(<version>)
+#        include <version>
+#    endif
+#endif
+
+// The C++23 range members. Guarded on the library rather than on the language, because what they
+// need is std::from_range_t and the range concepts, and a C++17 build has neither. Everything else
+// in this header stays exactly as it was for such a build.
+#if defined(__cpp_lib_containers_ranges) && __cpp_lib_containers_ranges >= 202202L
+#    define ANKERL_SVECTOR_HAS_RANGES 1
+#    include <concepts>
+#    include <ranges>
+#else
+#    define ANKERL_SVECTOR_HAS_RANGES 0
+#endif
+
 namespace ankerl {
 inline namespace ANKERL_SVECTOR_NAMESPACE {
 namespace detail {
@@ -76,6 +93,21 @@ using enable_if_t = std::enable_if_t<Condition::value, T>;
 
 template <typename It>
 using is_input_iterator = std::is_base_of<std::input_iterator_tag, typename std::iterator_traits<It>::iterator_category>;
+
+// A C++20 iterator need not publish an iterator_category, only an iterator_concept, and then
+// is_input_iterator above cannot even be formed. Used to decide whether a range can be handed to
+// the iterator pair members as it is.
+template <typename It, typename = void>
+struct has_iterator_category : std::false_type {};
+
+template <typename It>
+struct has_iterator_category<It, std::void_t<typename std::iterator_traits<It>::iterator_category>> : std::true_type {};
+
+#if ANKERL_SVECTOR_HAS_RANGES
+// The standard calls this container-compatible-range<T> and uses it for exactly these members.
+template <typename R, typename T>
+concept container_compatible_range = std::ranges::input_range<R> && std::convertible_to<std::ranges::range_reference_t<R>, T>;
+#endif
 
 constexpr auto round_up(size_t n, size_t multiple) -> size_t {
     return ((n + (multiple - 1)) / multiple) * multiple;
@@ -1380,6 +1412,20 @@ public:
         assign(first, last);
     }
 
+#if ANKERL_SVECTOR_HAS_RANGES
+    template <detail::container_compatible_range<T> R>
+    svector(std::from_range_t /*unused*/, R&& rg)
+        : svector() {
+        append_range(std::forward<R>(rg));
+    }
+
+    template <detail::container_compatible_range<T> R>
+    svector(std::from_range_t /*unused*/, R&& rg, Allocator const& alloc)
+        : svector(alloc) {
+        append_range(std::forward<R>(rg));
+    }
+#endif
+
     /**
      * @brief Copying asks the allocator which one the copy should use.
      *
@@ -1921,6 +1967,52 @@ public:
     auto insert(const_iterator pos, InputIt first, InputIt last) -> iterator {
         return insert(pos, first, last, typename std::iterator_traits<InputIt>::iterator_category());
     }
+
+#if ANKERL_SVECTOR_HAS_RANGES
+    /**
+     * @brief The C++23 range members, which std::vector has and this did not.
+     *
+     * All of them go through the iterator pair members, so a range gets the same growth, the same
+     * exception guarantees and the same self referencing checks an iterator pair already got,
+     * rather than a second implementation of all three.
+     *
+     * A range cannot always be handed over as a pair: its sentinel need not be its iterator, and
+     * its iterator need not publish an iterator_category. One that cannot is built into a
+     * temporary first. That costs an allocation for exactly the ranges that could not have been
+     * sized anyway.
+     */
+    template <typename R>
+    static constexpr bool is_iterator_pair_range =
+        std::ranges::common_range<R> && detail::has_iterator_category<std::ranges::iterator_t<R>>::value;
+
+    template <detail::container_compatible_range<T> R>
+    auto insert_range(const_iterator pos, R&& rg) -> iterator {
+        if constexpr (is_iterator_pair_range<R>) {
+            return insert(pos, std::ranges::begin(rg), std::ranges::end(rg));
+        } else {
+            auto tmp = svector(allocator());
+            for (auto&& element : rg) {
+                tmp.emplace_back(std::forward<decltype(element)>(element));
+            }
+            return insert(pos, std::make_move_iterator(tmp.begin()), std::make_move_iterator(tmp.end()));
+        }
+    }
+
+    template <detail::container_compatible_range<T> R>
+    void append_range(R&& rg) {
+        static_cast<void>(insert_range(cend(), std::forward<R>(rg)));
+    }
+
+    template <detail::container_compatible_range<T> R>
+    void assign_range(R&& rg) {
+        if constexpr (is_iterator_pair_range<R>) {
+            assign(std::ranges::begin(rg), std::ranges::end(rg));
+        } else {
+            clear();
+            append_range(std::forward<R>(rg));
+        }
+    }
+#endif
 
     auto insert(const_iterator pos, std::initializer_list<T> l) -> iterator {
         return insert(pos, l.begin(), l.end());

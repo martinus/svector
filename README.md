@@ -267,6 +267,10 @@ being a third the size of the next smallest object.
 
 ## Differences from std::vector
 
+The C++23 range members — `assign_range`, `append_range`, `insert_range` and the `std::from_range` constructor —
+are there when the standard library has `std::from_range_t` to build them on, and absent otherwise. A C++17
+build is exactly what it was.
+
 `ankerl::svector` implements all of `std::vector`'s API, plus `std::erase`/`std::erase_if`, and comparison
 operators that work between svectors of different inline capacities.
 
