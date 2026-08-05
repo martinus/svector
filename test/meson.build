@@ -127,7 +127,6 @@ if compiler.get_id() == 'clang'
         '-fsanitize-undefined-trap-on-error',
         '-fsanitize=undefined,address,fuzzer',
         '-g',
-        '-isystem', '/usr/lib64/clang/14.0.0/include/',
     ]
     fuzz_link_args = ['-fsanitize=undefined,address,fuzzer']
     fuzz_sources = [
