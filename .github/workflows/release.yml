@@ -53,7 +53,7 @@ jobs:
     # This is here so a release cannot be cut from a commit that was never actually run.
     - run: meson setup builddir --force-fallback-for=fmt
     - run: meson test -C builddir --print-errorlogs
-    - uses: actions/upload-artifact@v4
+    - uses: actions/upload-artifact@v7
       if: failure()
       with:
         name: release-meson-testlog
